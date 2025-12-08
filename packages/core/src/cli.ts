@@ -23,20 +23,34 @@ interface CompileCliOptions {
   help: boolean;
 }
 
+interface CheckCliOptions {
+  path: string;
+  noColor: boolean;
+  ignore: string[];
+  help: boolean;
+}
+
 const HELP_TEXT = `
 at-ref - Validate @path/to/file references
 
 Usage:
   at-ref <files...> [options]
+  at-ref check [path] [options]
   at-ref compile <files...> [options]
 
 Commands:
   (default)      Validate @ references in files
+  check          Scan all .md files and list broken links by file
   compile        Compile files by expanding @ references
 
 Validation Options:
   --no-color     Disable colored output
   --quiet        Only show errors
+  --ignore <p>   Ignore pattern (can be used multiple times)
+  --help         Show this help message
+
+Check Options:
+  --no-color     Disable colored output
   --ignore <p>   Ignore pattern (can be used multiple times)
   --help         Show this help message
 
@@ -50,6 +64,10 @@ Examples:
   at-ref docs/*.md
   at-ref . --quiet
   at-ref README.md --ignore "node_modules"
+
+  at-ref check
+  at-ref check docs/
+  at-ref check --ignore "vendor"
 
   at-ref compile CLAUDE.md
   at-ref compile CLAUDE.md --output CLAUDE.compiled.md
@@ -289,12 +307,161 @@ async function runCompile(args: string[]) {
   process.exit(hasFailures ? 1 : 0);
 }
 
+function parseCheckArgs(args: string[]): CheckCliOptions {
+  const options: CheckCliOptions = {
+    path: '.',
+    noColor: false,
+    ignore: [],
+    help: false,
+  };
+
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+    } else if (arg === '--no-color') {
+      options.noColor = true;
+    } else if (arg === '--ignore') {
+      i++;
+      const pattern = args[i];
+      if (pattern) {
+        options.ignore.push(pattern);
+      }
+    } else if (arg && !arg.startsWith('-')) {
+      options.path = arg;
+    }
+
+    i++;
+  }
+
+  return options;
+}
+
+interface BrokenLink {
+  file: string;
+  reference: string;
+  line: number;
+  column: number;
+  error: string;
+}
+
+async function runCheck(args: string[]) {
+  const options = parseCheckArgs(args);
+
+  if (options.help) {
+    console.log(HELP_TEXT);
+    process.exit(0);
+  }
+
+  const targetPath = options.path;
+
+  if (!fs.existsSync(targetPath)) {
+    console.error(`Error: Path not found: ${targetPath}`);
+    process.exit(1);
+  }
+
+  // Find all markdown files
+  let files: string[];
+  const stat = fs.statSync(targetPath);
+  if (stat.isDirectory()) {
+    files = findMarkdownFiles(targetPath);
+  } else if (targetPath.endsWith('.md')) {
+    files = [targetPath];
+  } else {
+    console.error('Error: Path must be a directory or a markdown file');
+    process.exit(1);
+  }
+
+  if (files.length === 0) {
+    console.log('No markdown files found');
+    process.exit(0);
+  }
+
+  const c = options.noColor
+    ? { reset: '', green: '', red: '', yellow: '', cyan: '', dim: '', bold: '' }
+    : { ...colors, bold: '\x1b[1m' };
+
+  const ignorePatterns = options.ignore.map((p) => new RegExp(p));
+  const brokenByFile: Map<string, BrokenLink[]> = new Map();
+  let totalFiles = 0;
+  let filesWithBroken = 0;
+  let totalBroken = 0;
+  let totalValid = 0;
+
+  for (const file of files) {
+    try {
+      const result = validateFile(file, { ignorePatterns });
+      totalFiles++;
+      totalValid += result.valid.length;
+
+      if (result.invalid.length > 0) {
+        filesWithBroken++;
+        totalBroken += result.invalid.length;
+
+        const broken: BrokenLink[] = result.invalid.map((ref) => ({
+          file,
+          reference: ref.raw,
+          line: ref.line,
+          column: ref.column,
+          error: ref.resolution.error || 'File not found',
+        }));
+
+        brokenByFile.set(file, broken);
+      }
+    } catch (err) {
+      console.error(`${c.red}Error processing ${file}:${c.reset}`, err);
+    }
+  }
+
+  // Output results
+  console.log(`${c.bold}@Reference Check Report${c.reset}`);
+  console.log(`${c.dim}${'─'.repeat(50)}${c.reset}`);
+  console.log(`Scanned ${c.cyan}${totalFiles}${c.reset} markdown file(s)\n`);
+
+  if (brokenByFile.size === 0) {
+    console.log(`${c.green}✓ All references are valid!${c.reset}`);
+    console.log(`  ${totalValid} reference(s) checked`);
+    process.exit(0);
+  }
+
+  // List broken links by file
+  console.log(`${c.red}${c.bold}Broken References:${c.reset}\n`);
+
+  for (const [file, broken] of brokenByFile) {
+    const relativeFile = path.relative(process.cwd(), file) || file;
+    console.log(`${c.cyan}${relativeFile}${c.reset}`);
+
+    for (const link of broken) {
+      console.log(`  ${c.red}✗${c.reset} ${link.reference} ${c.dim}(line ${link.line}, col ${link.column})${c.reset}`);
+      console.log(`    ${c.dim}→ ${link.error}${c.reset}`);
+    }
+    console.log('');
+  }
+
+  // Summary
+  console.log(`${c.dim}${'─'.repeat(50)}${c.reset}`);
+  console.log(`${c.bold}Summary:${c.reset}`);
+  console.log(`  Files with broken refs: ${c.red}${filesWithBroken}${c.reset} / ${totalFiles}`);
+  console.log(`  Total broken refs:      ${c.red}${totalBroken}${c.reset}`);
+  console.log(`  Total valid refs:       ${c.green}${totalValid}${c.reset}`);
+
+  process.exit(1);
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
   // Check for compile command
   if (args[0] === 'compile') {
     await runCompile(args.slice(1));
+    return;
+  }
+
+  // Check for check command
+  if (args[0] === 'check') {
+    await runCheck(args.slice(1));
     return;
   }
 
