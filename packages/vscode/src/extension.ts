@@ -5,6 +5,7 @@ import { AtReferenceLinkProvider } from './providers/documentLinkProvider';
 import { AtReferenceDiagnosticsProvider } from './providers/diagnosticsProvider';
 import { AtReferenceHoverProvider } from './providers/hoverProvider';
 import { AtReferenceCompletionProvider } from './providers/completionProvider';
+import { AtReferenceDecorationProvider } from './providers/decorationProvider';
 import { getConfig } from './config';
 import { compileFile, getBuiltOutputPath } from '@at-reference/core';
 
@@ -50,6 +51,10 @@ export function activate(context: vscode.ExtensionContext) {
       )
     );
   }
+
+  // Decorations - always enabled for visual feedback
+  const decorationProvider = new AtReferenceDecorationProvider();
+  context.subscriptions.push(decorationProvider);
 
   // Compile file command
   context.subscriptions.push(
