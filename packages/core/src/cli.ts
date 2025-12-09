@@ -4,9 +4,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { validateFile } from './validator';
 import { formatValidationResult, formatSummary } from './formatter';
-import { compileFile, getBuiltOutputPath } from './compiler';
+import { compileFile, compileFolder, getBuiltOutputPath } from './compiler';
 import type { ValidationResult } from './types';
-import type { CompileResult } from './compiler';
+import type { CompileResult, FolderCompileResult } from './compiler';
 import { buildReferenceTree, formatTree } from './tree-formatter';
 
 /**
@@ -40,6 +40,7 @@ interface CliOptions {
 interface CompileCliOptions {
   files: string[];
   output?: string;
+  outputDir?: string;
   noColor: boolean;
   workspaceRootPath?: string;
   skipFrontmatter: boolean;
@@ -82,7 +83,9 @@ Check Options:
   --help                  Show this help message
 
 Compile Options:
-  --output <p>            Output path (for single file only)
+  --output <path>         Output file (single file only)
+  --output-dir <path>     Output directory (folder mode, default: dist/)
+  --dist <path>           Alias for --output-dir
   --skip-frontmatter      Skip @refs in front matter & strip it from output
   --optimize-duplicates   Only import each file once, use references for duplicates
   --no-color              Disable colored output
@@ -102,6 +105,7 @@ Examples:
   at-ref compile CLAUDE.md
   at-ref compile CLAUDE.md --output CLAUDE.compiled.md
   at-ref compile docs/
+  at-ref compile docs/ --output-dir build/ --optimize-duplicates
 `;
 
 function parseArgs(args: string[]): CliOptions {
@@ -232,6 +236,12 @@ function parseCompileArgs(args: string[]): CompileCliOptions {
       if (outputPath) {
         options.output = outputPath;
       }
+    } else if (arg === '--output-dir' || arg === '--dist') {
+      i++;
+      const outputDir = args[i];
+      if (outputDir) {
+        options.outputDir = outputDir;
+      }
     } else if (arg === '--workspace-root-path') {
       i++;
       const rootPath = args[i];
@@ -298,6 +308,114 @@ function formatCompileResult(result: CompileResult, noColor: boolean): string {
   return lines.join('\n');
 }
 
+function findCommonAncestor(paths: string[]): string {
+  if (paths.length === 0) return process.cwd();
+  if (paths.length === 1) return path.dirname(path.resolve(paths[0]!));
+
+  const resolved = paths.map(p => path.resolve(p));
+  const parts = resolved.map(p => p.split(path.sep));
+
+  let commonParts: string[] = [];
+  for (let i = 0; i < parts[0]!.length; i++) {
+    const part = parts[0]![i];
+    if (parts.every(p => p[i] === part)) {
+      commonParts.push(part!);
+    } else {
+      break;
+    }
+  }
+
+  return commonParts.join(path.sep) || path.sep;
+}
+
+function formatFolderResult(result: FolderCompileResult, noColor: boolean): string {
+  const c = noColor
+    ? { reset: '', green: '', red: '', yellow: '', cyan: '', dim: '' }
+    : colors;
+
+  const lines: string[] = [];
+
+  lines.push(`${c.cyan}Folder compilation complete${c.reset}\n`);
+  lines.push(`  ${c.dim}Input:${c.reset}  ${result.inputDir}`);
+  lines.push(`  ${c.dim}Output:${c.reset} ${result.outputDir}\n`);
+
+  const summary: string[] = [];
+  summary.push(`${c.green}${result.totalFiles} files compiled${c.reset}`);
+  summary.push(`${c.green}${result.totalReferences} references resolved${c.reset}`);
+
+  if (result.totalFailures > 0) {
+    summary.push(`${c.red}${result.totalFailures} failures${c.reset}`);
+  }
+
+  if (result.circularFiles.length > 0) {
+    summary.push(`${c.yellow}${result.circularFiles.length} circular dependencies${c.reset}`);
+  }
+
+  lines.push(`  ${summary.join(', ')}`);
+  lines.push(`  ${c.dim}Duration:${c.reset} ${result.duration}ms\n`);
+
+  if (result.totalFailures === 0) {
+    lines.push(`${c.green}✓${c.reset} All files compiled successfully`);
+  }
+
+  return lines.join('\n');
+}
+
+async function runSingleFileCompile(file: string, options: CompileCliOptions) {
+  if (!fs.existsSync(file)) {
+    console.error(`Error: File not found: ${file}`);
+    process.exit(1);
+  }
+
+  try {
+    const fileDir = path.dirname(path.resolve(file));
+    const workspaceRoot = findWorkspaceRoot(fileDir, options.workspaceRootPath);
+    const outputPath = options.output || getBuiltOutputPath(file);
+    const result = compileFile(file, {
+      outputPath,
+      basePath: workspaceRoot,
+      skipFrontmatter: options.skipFrontmatter,
+      optimizeDuplicates: options.optimizeDuplicates
+    });
+
+    console.log(formatCompileResult(result, options.noColor));
+
+    process.exit(result.failedCount > 0 ? 1 : 0);
+  } catch (err) {
+    console.error(`Error compiling ${file}:`, err);
+    process.exit(1);
+  }
+}
+
+async function runFolderCompile(inputPaths: string[], options: CompileCliOptions) {
+  // Determine input directory
+  let inputDir: string;
+  if (inputPaths.length === 1 && fs.existsSync(inputPaths[0]!) && fs.statSync(inputPaths[0]!).isDirectory()) {
+    inputDir = inputPaths[0]!;
+  } else {
+    inputDir = findCommonAncestor(inputPaths);
+  }
+
+  const workspaceRoot = findWorkspaceRoot(path.resolve(inputDir), options.workspaceRootPath);
+  const outputDir = options.outputDir || path.join(inputDir, 'dist');
+
+  try {
+    const result = compileFolder(inputDir, {
+      outputDir,
+      basePath: workspaceRoot,
+      skipFrontmatter: true, // Default to true for folder mode
+      optimizeDuplicates: options.optimizeDuplicates
+    });
+
+    console.log(formatFolderResult(result, options.noColor));
+
+    process.exit(result.totalFailures > 0 ? 1 : 0);
+  } catch (err) {
+    console.error(`Error compiling folder ${inputDir}:`, err);
+    process.exit(1);
+  }
+}
+
 async function runCompile(args: string[]) {
   const options = parseCompileArgs(args);
 
@@ -319,57 +437,24 @@ async function runCompile(args: string[]) {
     process.exit(1);
   }
 
-  // If output is specified, only allow single file
-  if (options.output && files.length > 1) {
-    console.error('Error: --output can only be used with a single file');
+  // Detect folder mode
+  const isFolderMode =
+    files.length > 1 ||
+    (files.length === 1 && fs.statSync(files[0]!).isDirectory()) ||
+    options.outputDir !== undefined;
+
+  // Validate flag combinations
+  if (isFolderMode && options.output) {
+    console.error('Error: Cannot use --output with directories or multiple files. Use --output-dir instead.');
     process.exit(1);
   }
 
-  let hasFailures = false;
-  const results: CompileResult[] = [];
-
-  for (const file of files) {
-    if (!fs.existsSync(file)) {
-      console.error(`Error: File not found: ${file}`);
-      hasFailures = true;
-      continue;
-    }
-
-    try {
-      const fileDir = path.dirname(path.resolve(file));
-      const workspaceRoot = findWorkspaceRoot(fileDir, options.workspaceRootPath);
-      const outputPath = options.output || getBuiltOutputPath(file);
-      const result = compileFile(file, {
-        outputPath,
-        basePath: workspaceRoot,
-        skipFrontmatter: options.skipFrontmatter,
-        optimizeDuplicates: options.optimizeDuplicates
-      });
-      results.push(result);
-
-      console.log(formatCompileResult(result, options.noColor));
-      console.log('');
-
-      if (result.failedCount > 0) {
-        hasFailures = true;
-      }
-    } catch (err) {
-      console.error(`Error compiling ${file}:`, err);
-      hasFailures = true;
-    }
+  // Branch to appropriate handler
+  if (isFolderMode) {
+    await runFolderCompile(files, options);
+  } else {
+    await runSingleFileCompile(files[0]!, options);
   }
-
-  // Summary for multiple files
-  if (results.length > 1) {
-    const totalSuccess = results.reduce((sum, r) => sum + r.successCount, 0);
-    const totalFailed = results.reduce((sum, r) => sum + r.failedCount, 0);
-    const c = options.noColor
-      ? { reset: '', green: '', red: '', cyan: '' }
-      : colors;
-    console.log(`${c.cyan}Total:${c.reset} ${results.length} files compiled, ${c.green}${totalSuccess} references resolved${c.reset}, ${c.red}${totalFailed} failed${c.reset}`);
-  }
-
-  process.exit(hasFailures ? 1 : 0);
 }
 
 function parseCheckArgs(args: string[]): CheckCliOptions {
