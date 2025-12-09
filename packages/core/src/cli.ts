@@ -8,11 +8,31 @@ import { compileFile, getBuiltOutputPath } from './compiler';
 import type { ValidationResult } from './types';
 import type { CompileResult } from './compiler';
 
+/**
+ * Find workspace root by looking for .git directory
+ */
+function findWorkspaceRoot(startPath: string, explicitRoot?: string): string {
+  if (explicitRoot) {
+    return path.resolve(explicitRoot);
+  }
+
+  let current = startPath;
+  while (current !== path.dirname(current)) {
+    const gitPath = path.join(current, '.git');
+    if (fs.existsSync(gitPath)) {
+      return current;
+    }
+    current = path.dirname(current);
+  }
+  return startPath; // fallback to document dir
+}
+
 interface CliOptions {
   files: string[];
   noColor: boolean;
   quiet: boolean;
   ignore: string[];
+  workspaceRootPath?: string;
   help: boolean;
 }
 
@@ -20,6 +40,7 @@ interface CompileCliOptions {
   files: string[];
   output?: string;
   noColor: boolean;
+  workspaceRootPath?: string;
   help: boolean;
 }
 
@@ -27,6 +48,7 @@ interface CheckCliOptions {
   path: string;
   noColor: boolean;
   ignore: string[];
+  workspaceRootPath?: string;
   help: boolean;
 }
 
@@ -44,20 +66,23 @@ Commands:
   compile        Compile files by expanding @ references
 
 Validation Options:
-  --no-color     Disable colored output
-  --quiet        Only show errors
-  --ignore <p>   Ignore pattern (can be used multiple times)
-  --help         Show this help message
+  --no-color              Disable colored output
+  --quiet                 Only show errors
+  --ignore <p>            Ignore pattern (can be used multiple times)
+  --workspace-root-path   Explicit workspace root path
+  --help                  Show this help message
 
 Check Options:
-  --no-color     Disable colored output
-  --ignore <p>   Ignore pattern (can be used multiple times)
-  --help         Show this help message
+  --no-color              Disable colored output
+  --ignore <p>            Ignore pattern (can be used multiple times)
+  --workspace-root-path   Explicit workspace root path
+  --help                  Show this help message
 
 Compile Options:
-  --output <p>   Output path (for single file only)
-  --no-color     Disable colored output
-  --help         Show this help message
+  --output <p>            Output path (for single file only)
+  --no-color              Disable colored output
+  --workspace-root-path   Explicit workspace root path
+  --help                  Show this help message
 
 Examples:
   at-ref CLAUDE.md
@@ -98,6 +123,12 @@ function parseArgs(args: string[]): CliOptions {
       const pattern = args[i];
       if (pattern) {
         options.ignore.push(pattern);
+      }
+    } else if (arg === '--workspace-root-path') {
+      i++;
+      const rootPath = args[i];
+      if (rootPath) {
+        options.workspaceRootPath = rootPath;
       }
     } else if (arg && !arg.startsWith('-')) {
       options.files.push(arg);
@@ -190,6 +221,12 @@ function parseCompileArgs(args: string[]): CompileCliOptions {
       if (outputPath) {
         options.output = outputPath;
       }
+    } else if (arg === '--workspace-root-path') {
+      i++;
+      const rootPath = args[i];
+      if (rootPath) {
+        options.workspaceRootPath = rootPath;
+      }
     } else if (arg && !arg.startsWith('-')) {
       options.files.push(arg);
     }
@@ -278,8 +315,10 @@ async function runCompile(args: string[]) {
     }
 
     try {
+      const fileDir = path.dirname(path.resolve(file));
+      const workspaceRoot = findWorkspaceRoot(fileDir, options.workspaceRootPath);
       const outputPath = options.output || getBuiltOutputPath(file);
-      const result = compileFile(file, { outputPath });
+      const result = compileFile(file, { outputPath, basePath: workspaceRoot });
       results.push(result);
 
       console.log(formatCompileResult(result, options.noColor));
@@ -328,6 +367,12 @@ function parseCheckArgs(args: string[]): CheckCliOptions {
       const pattern = args[i];
       if (pattern) {
         options.ignore.push(pattern);
+      }
+    } else if (arg === '--workspace-root-path') {
+      i++;
+      const rootPath = args[i];
+      if (rootPath) {
+        options.workspaceRootPath = rootPath;
       }
     } else if (arg && !arg.startsWith('-')) {
       options.path = arg;
@@ -392,7 +437,9 @@ async function runCheck(args: string[]) {
 
   for (const file of files) {
     try {
-      const result = validateFile(file, { ignorePatterns });
+      const fileDir = path.dirname(path.resolve(file));
+      const workspaceRoot = findWorkspaceRoot(fileDir, options.workspaceRootPath);
+      const result = validateFile(file, { ignorePatterns, basePath: workspaceRoot });
       totalFiles++;
       totalValid += result.valid.length;
 
@@ -497,7 +544,9 @@ async function main() {
     }
 
     try {
-      const result = validateFile(file, { ignorePatterns });
+      const fileDir = path.dirname(path.resolve(file));
+      const workspaceRoot = findWorkspaceRoot(fileDir, options.workspaceRootPath);
+      const result = validateFile(file, { ignorePatterns, basePath: workspaceRoot });
       results.push({ file, result });
 
       if (result.invalid.length > 0) {

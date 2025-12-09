@@ -18,7 +18,7 @@ export function resolvePath(
   } else if (refPath.startsWith('./') || refPath.startsWith('../')) {
     targetPath = path.resolve(basePath, refPath);
   } else if (refPath.startsWith('/')) {
-    targetPath = path.resolve(basePath, '.' + refPath);
+    targetPath = refPath;  // Already absolute, use as-is
   } else {
     targetPath = path.resolve(basePath, refPath);
   }
