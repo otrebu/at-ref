@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { extractReferences, stripFrontMatter } from './parser';
 import { resolvePath } from './resolver';
 import type { AtReference, ResolveOptions } from './types';
+import { buildDependencyGraph, topologicalSort, type DependencyGraph } from './dependency-graph';
 
 /**
  * Options for compiling @ references
@@ -18,6 +19,40 @@ export interface CompileOptions extends ResolveOptions {
   skipFrontmatter?: boolean;
   /** Only import each file once, use references for duplicates */
   optimizeDuplicates?: boolean;
+}
+
+/**
+ * Options for folder compilation
+ */
+export interface FolderCompileOptions extends CompileOptions {
+  /** Output directory (default: inputDir/dist) */
+  outputDir?: string;
+  /** Whether to preserve source directory structure (default: true) */
+  preserveStructure?: boolean;
+}
+
+/**
+ * Result of compiling a folder
+ */
+export interface FolderCompileResult {
+  /** Input directory path */
+  inputDir: string;
+  /** Output directory path */
+  outputDir: string;
+  /** Individual file compilation results */
+  results: CompileResult[];
+  /** Total files compiled */
+  totalFiles: number;
+  /** Total references resolved */
+  totalReferences: number;
+  /** Total failures */
+  totalFailures: number;
+  /** Dependency graph used for compilation */
+  graph: DependencyGraph;
+  /** Files that had circular dependencies */
+  circularFiles: string[];
+  /** Compilation duration in milliseconds */
+  duration: number;
 }
 
 /**
@@ -311,12 +346,21 @@ function compileContentRecursive(
 }
 
 /**
- * Compile a single file, resolving all @ references recursively
+ * Internal compile function that accepts external cache maps
+ * Allows sharing import tracking across multiple file compilations
  */
-export function compileFile(filePath: string, options: CompileOptions = {}): CompileResult {
+function compileFileWithCache(
+  filePath: string,
+  options: CompileOptions & {
+    importCounts?: Map<string, number>;
+    importedFiles?: Set<string>;
+  } = {}
+): CompileResult {
   const {
     outputPath = getBuiltOutputPath(filePath),
     writeOutput = true,
+    importCounts = new Map<string, number>(),
+    importedFiles = new Set<string>(),
   } = options;
 
   const absoluteInputPath = path.resolve(filePath);
@@ -324,12 +368,6 @@ export function compileFile(filePath: string, options: CompileOptions = {}): Com
 
   // Initialize path stack with root file for circular detection
   const pathStack = [absoluteInputPath];
-
-  // Initialize import counts map for duplicate tracking
-  const importCounts = new Map<string, number>();
-
-  // Initialize imported files set for optimization
-  const importedFiles = new Set<string>();
 
   // Use the file's directory as the base path for resolution
   const effectiveBasePath = options.basePath ?? path.dirname(absoluteInputPath);
@@ -376,6 +414,21 @@ export function compileFile(filePath: string, options: CompileOptions = {}): Com
 }
 
 /**
+ * Compile a single file, resolving all @ references recursively
+ */
+export function compileFile(filePath: string, options: CompileOptions = {}): CompileResult {
+  // Create local cache for single-file compilation
+  const importCounts = new Map<string, number>();
+  const importedFiles = new Set<string>();
+
+  return compileFileWithCache(filePath, {
+    ...options,
+    importCounts,
+    importedFiles
+  });
+}
+
+/**
  * Compile content string without file I/O (useful for VSCode extension)
  * Recursively resolves all @references including nested ones
  */
@@ -407,4 +460,140 @@ export function compileContent(
     importCounts,
     importedFiles
   );
+}
+
+/**
+ * Recursively find all .md files in a directory
+ */
+function findMarkdownFiles(dir: string): string[] {
+  const files: string[] = [];
+
+  function walk(currentDir: string) {
+    const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  walk(dir);
+  return files;
+}
+
+/**
+ * Compile all markdown files in a directory with bottom-up dependency ordering
+ */
+export function compileFolder(
+  inputDir: string,
+  options: FolderCompileOptions = {}
+): FolderCompileResult {
+  const startTime = Date.now();
+
+  const absoluteInputDir = path.resolve(inputDir);
+  const outputDir = options.outputDir || path.join(absoluteInputDir, 'dist');
+  const preserveStructure = options.preserveStructure ?? true;
+
+  // Find all markdown files
+  const markdownFiles = findMarkdownFiles(absoluteInputDir);
+
+  if (markdownFiles.length === 0) {
+    return {
+      inputDir: absoluteInputDir,
+      outputDir,
+      results: [],
+      totalFiles: 0,
+      totalReferences: 0,
+      totalFailures: 0,
+      graph: { nodes: new Map(), rootFiles: new Set(), errors: [] },
+      circularFiles: [],
+      duration: Date.now() - startTime
+    };
+  }
+
+  // Build dependency graph
+  const graph = buildDependencyGraph(markdownFiles, {
+    basePath: options.basePath,
+    tryExtensions: options.tryExtensions
+  });
+
+  // Topologically sort files (dependencies before dependents)
+  const { sorted } = topologicalSort(graph);
+
+  // Initialize global cache (shared across all files)
+  const globalImportCounts = new Map<string, number>();
+  const globalImportedFiles = new Set<string>();
+
+  // Compile files in dependency order
+  const results: CompileResult[] = [];
+
+  for (const filePath of sorted) {
+    // Calculate output path
+    let outputPath: string;
+    if (preserveStructure) {
+      const relativePath = path.relative(absoluteInputDir, filePath);
+      outputPath = path.join(outputDir, relativePath);
+    } else {
+      outputPath = path.join(outputDir, path.basename(filePath));
+    }
+
+    // Ensure output directory exists
+    const outputDirPath = path.dirname(outputPath);
+    fs.mkdirSync(outputDirPath, { recursive: true });
+
+    // Compile with shared cache
+    try {
+      const result = compileFileWithCache(filePath, {
+        ...options,
+        outputPath,
+        writeOutput: true,
+        importCounts: globalImportCounts,
+        importedFiles: globalImportedFiles
+      });
+
+      results.push(result);
+    } catch (error) {
+      // Record compilation failure
+      results.push({
+        inputPath: filePath,
+        outputPath,
+        compiledContent: '',
+        references: [],
+        successCount: 0,
+        failedCount: 1,
+        written: false,
+        importStats: {
+          fileImportCounts: new Map(),
+          duplicateFiles: []
+        }
+      });
+    }
+  }
+
+  // Aggregate statistics
+  const totalFiles = results.length;
+  const totalReferences = results.reduce((sum, r) => sum + r.references.length, 0);
+  const totalFailures = results.reduce((sum, r) => sum + r.failedCount, 0);
+
+  // Find files involved in circular dependencies
+  const circularFiles = results
+    .flatMap(r => r.references.filter(ref => ref.circular).map(ref => ref.resolvedPath))
+    .filter((v, i, a) => a.indexOf(v) === i); // unique
+
+  return {
+    inputDir: absoluteInputDir,
+    outputDir,
+    results,
+    totalFiles,
+    totalReferences,
+    totalFailures,
+    graph,
+    circularFiles,
+    duration: Date.now() - startTime
+  };
 }
