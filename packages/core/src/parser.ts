@@ -139,13 +139,85 @@ function offsetToPosition(
 }
 
 /**
+ * Check if position is within YAML front matter
+ */
+export function isInFrontMatter(content: string, position: number): boolean {
+  if (!content.trimStart().startsWith('---')) {
+    return false;
+  }
+
+  const lines = content.split('\n');
+  let inFrontMatter = false;
+  let frontMatterEnd = 0;
+  let currentPos = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const currentLine = lines[i];
+    if (!currentLine) continue;
+
+    const line = currentLine.trim();
+
+    if (i === 0 && line === '---') {
+      inFrontMatter = true;
+      currentPos += currentLine.length + 1;
+      continue;
+    }
+
+    if (inFrontMatter && line === '---') {
+      frontMatterEnd = currentPos + currentLine.length;
+      break;
+    }
+
+    currentPos += currentLine.length + 1;
+  }
+
+  return position < frontMatterEnd;
+}
+
+/**
+ * Remove YAML front matter from content
+ */
+export function stripFrontMatter(content: string): string {
+  if (!content.trimStart().startsWith('---')) {
+    return content;
+  }
+
+  const lines = content.split('\n');
+  let inFrontMatter = false;
+  const strippedLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const currentLine = lines[i];
+    if (currentLine === undefined) continue;
+
+    const line = currentLine.trim();
+
+    if (i === 0 && line === '---') {
+      inFrontMatter = true;
+      continue;
+    }
+
+    if (inFrontMatter && line === '---') {
+      inFrontMatter = false;
+      continue;
+    }
+
+    if (!inFrontMatter) {
+      strippedLines.push(currentLine);
+    }
+  }
+
+  return strippedLines.join('\n');
+}
+
+/**
  * Extract all @ references from text content
  */
 export function extractReferences(
   content: string,
-  options: ParseOptions = {}
+  options: ParseOptions & { skipFrontmatter?: boolean } = {}
 ): AtReference[] {
-  const { zeroIndexed = false } = options;
+  const { zeroIndexed = false, skipFrontmatter = false } = options;
   const references: AtReference[] = [];
   const lineOffsets = buildLineOffsets(content);
   const codeSpanRanges = findCodeSpanRanges(content);
@@ -164,6 +236,11 @@ export function extractReferences(
 
     // Skip references inside code spans (backticks)
     if (isInsideCodeSpan(refStart, codeSpanRanges)) {
+      continue;
+    }
+
+    // Skip references in front matter
+    if (skipFrontmatter && isInFrontMatter(content, refStart)) {
       continue;
     }
 

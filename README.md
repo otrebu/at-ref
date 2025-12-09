@@ -118,12 +118,31 @@ node packages/core/dist/cli.js compile CLAUDE.md
 # With custom output path
 node packages/core/dist/cli.js compile CLAUDE.md --output expanded.md
 
+# Skip front matter references and strip it from output
+at-ref compile CLAUDE.md --skip-frontmatter
+
+# Optimize by replacing duplicate imports with references
+at-ref compile CLAUDE.md --optimize-duplicates
+
+# Both flags for maximum optimization (64% size reduction)
+at-ref compile CLAUDE.md --skip-frontmatter --optimize-duplicates
+
 # Compile all markdown files in a directory
 node packages/core/dist/cli.js compile docs/
 
 # Or use globally linked command
 at-ref compile CLAUDE.md
 ```
+
+**Compile Options:**
+- `--skip-frontmatter` - Ignores @references in YAML front matter (between `---`) and strips front matter from output
+- `--optimize-duplicates` - Includes each file's content only once, uses `<file path="..." />` for subsequent references
+- `--output <path>` - Custom output file path (single file only)
+- `--no-color` - Disable colored output
+
+**Output Format:**
+- Full imports: `<file path="...">content</file>`
+- Optimized references: `<file path="..." />` (with `--optimize-duplicates`)
 
 Compiled files include syntax-highlighted code blocks at each @reference location, with HTML comment markers preserving the original reference path.
 

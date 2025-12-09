@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { extractReferences } from './parser';
+import { extractReferences, stripFrontMatter } from './parser';
 import { resolvePath } from './resolver';
 import type { AtReference, ResolveOptions } from './types';
 
@@ -14,8 +14,10 @@ export interface CompileOptions extends ResolveOptions {
   writeOutput?: boolean;
   /** Custom wrapper for file content (default: XML tags) */
   contentWrapper?: (content: string, filePath: string, ref: AtReference) => string;
-  /** Set of already visited file paths (for circular dependency detection) */
-  _visitedFiles?: Set<string>;
+  /** Skip @references in front matter and strip it from output */
+  skipFrontmatter?: boolean;
+  /** Only import each file once, use references for duplicates */
+  optimizeDuplicates?: boolean;
 }
 
 /**
@@ -34,6 +36,20 @@ export interface CompiledReference {
   error?: string;
   /** Whether this reference was skipped due to circular dependency */
   circular?: boolean;
+  /** Number of times this file has been imported */
+  importCount?: number;
+  /** Parent file path that imported this reference */
+  importedFrom?: string;
+}
+
+/**
+ * Statistics about file imports during compilation
+ */
+export interface ImportStats {
+  /** Map of file path to number of times it was imported */
+  fileImportCounts: Map<string, number>;
+  /** Array of files that were imported more than once */
+  duplicateFiles: string[];
 }
 
 /**
@@ -54,6 +70,8 @@ export interface CompileResult {
   failedCount: number;
   /** Whether output was written */
   written: boolean;
+  /** Statistics about file imports */
+  importStats: ImportStats;
 }
 
 /**
@@ -110,6 +128,32 @@ function defaultContentWrapper(content: string, filePath: string, _ref: AtRefere
 }
 
 /**
+ * Reference wrapper - lightweight self-closing reference to already-imported file
+ */
+function referenceWrapper(filePath: string): string {
+  return `<file path="${filePath}" />`;
+}
+
+/**
+ * Find line boundaries for a reference to replace entire line
+ */
+function getLineBoundaries(content: string, refStart: number, refEnd: number): { start: number; end: number } {
+  // Find start of line (previous newline or start of string)
+  let lineStart = refStart;
+  while (lineStart > 0 && content[lineStart - 1] !== '\n') {
+    lineStart--;
+  }
+
+  // Find end of line (next newline or end of string)
+  let lineEnd = refEnd;
+  while (lineEnd < content.length && content[lineEnd] !== '\n') {
+    lineEnd++;
+  }
+
+  return { start: lineStart, end: lineEnd };
+}
+
+/**
  * Generate output path with .built suffix
  */
 export function getBuiltOutputPath(inputPath: string): string {
@@ -126,22 +170,53 @@ function compileContentRecursive(
   content: string,
   currentFilePath: string,
   options: CompileOptions,
-  visitedFiles: Set<string>
+  pathStack: string[],
+  importCounts: Map<string, number>,
+  importedFiles: Set<string>
 ): { compiledContent: string; references: CompiledReference[] } {
   const {
     basePath = path.dirname(currentFilePath),
     contentWrapper = defaultContentWrapper,
     tryExtensions = [],
+    skipFrontmatter = false,
+    optimizeDuplicates = false,
   } = options;
 
-  const references = extractReferences(content);
+  // Strip front matter if requested
+  let processedContent = content;
+  if (skipFrontmatter) {
+    processedContent = stripFrontMatter(content);
+  }
+
+  const references = extractReferences(processedContent, { skipFrontmatter });
   const compiledRefs: CompiledReference[] = [];
+
+  // Use processedContent for compilation
+  let compiledContent = processedContent;
+
+  // Pre-scan references in forward order to mark which specific refs should be full imports
+  // (first occurrence of each file gets full content, rest get references)
+  // IMPORTANT: Check importedFiles to respect files already imported in parent scope
+  const firstOccurrenceIndices = new Set<number>();
+  if (optimizeDuplicates) {
+    const seenPaths = new Set<string>();
+    for (let i = 0; i < references.length; i++) {
+      const ref = references[i];
+      if (!ref) continue;
+      const resolved = resolvePath(ref.path, { basePath, tryExtensions });
+      if (resolved.exists && !resolved.isDirectory) {
+        // Only mark as first if NOT already imported in parent AND not seen in this file
+        if (!importedFiles.has(resolved.resolvedPath) && !seenPaths.has(resolved.resolvedPath)) {
+          firstOccurrenceIndices.add(ref.startIndex); // Track by position
+          seenPaths.add(resolved.resolvedPath);
+        }
+      }
+    }
+  }
 
   // Sort references by startIndex in reverse order to replace from end to start
   // This ensures indices remain valid as we modify the string
   const sortedRefs = [...references].sort((a, b) => b.startIndex - a.startIndex);
-
-  let compiledContent = content;
 
   for (const ref of sortedRefs) {
     const resolved = resolvePath(ref.path, { basePath, tryExtensions });
@@ -152,8 +227,8 @@ function compileContentRecursive(
       found: resolved.exists && !resolved.isDirectory,
     };
 
-    // Check for circular dependency
-    if (visitedFiles.has(resolved.resolvedPath)) {
+    // Check for circular dependency (only if file is in current path stack)
+    if (pathStack.includes(resolved.resolvedPath)) {
       compiledRef.found = false;
       compiledRef.circular = true;
       compiledRef.error = `Circular dependency detected: ${resolved.resolvedPath}`;
@@ -163,35 +238,58 @@ function compileContentRecursive(
 
     if (resolved.exists && !resolved.isDirectory) {
       try {
-        let fileContent = fs.readFileSync(resolved.resolvedPath, 'utf-8');
+        // Track import count
+        const currentCount = importCounts.get(resolved.resolvedPath) || 0;
+        importCounts.set(resolved.resolvedPath, currentCount + 1);
 
-        // Add this file to visited set before recursing
-        visitedFiles.add(resolved.resolvedPath);
+        compiledRef.importCount = currentCount + 1;
+        compiledRef.importedFrom = currentFilePath;
 
-        // Recursively compile the referenced file's content
-        // Use the referenced file's directory as the new basePath
-        const nestedResult = compileContentRecursive(
-          fileContent,
-          resolved.resolvedPath,
-          {
-            ...options,
-            basePath: path.dirname(resolved.resolvedPath),
-          },
-          visitedFiles
-        );
+        // Check if this specific reference is marked as first occurrence
+        const isFirstOccurrence = firstOccurrenceIndices.has(ref.startIndex);
 
-        // Use the recursively compiled content
-        fileContent = nestedResult.compiledContent;
-        compiledRef.content = fileContent;
+        if (optimizeDuplicates && !isFirstOccurrence) {
+          // Use lightweight reference instead of full content (not first occurrence)
+          const refTag = referenceWrapper(resolved.resolvedPath);
+          compiledContent =
+            compiledContent.slice(0, ref.startIndex) +
+            refTag +
+            compiledContent.slice(ref.endIndex);
 
-        // Add nested references to our list
-        compiledRefs.push(...nestedResult.references);
+          compiledRef.content = ''; // Mark as optimized
+        } else {
+          // First import - include full content
+          importedFiles.add(resolved.resolvedPath);
 
-        const wrapped = contentWrapper(fileContent, resolved.resolvedPath, ref);
-        compiledContent =
-          compiledContent.slice(0, ref.startIndex) +
-          wrapped +
-          compiledContent.slice(ref.endIndex);
+          let fileContent = fs.readFileSync(resolved.resolvedPath, 'utf-8');
+
+          // Add to path stack for circular detection
+          const newPathStack = [...pathStack, resolved.resolvedPath];
+
+          // Recursively compile the referenced file's content
+          // Preserve basePath to maintain workspace-root-relative resolution
+          const nestedResult = compileContentRecursive(
+            fileContent,
+            resolved.resolvedPath,
+            options,
+            newPathStack,
+            importCounts,
+            importedFiles
+          );
+
+          // Use the recursively compiled content
+          fileContent = nestedResult.compiledContent;
+          compiledRef.content = fileContent;
+
+          // Add nested references to our list
+          compiledRefs.push(...nestedResult.references);
+
+          const wrapped = contentWrapper(fileContent, resolved.resolvedPath, ref);
+          compiledContent =
+            compiledContent.slice(0, ref.startIndex) +
+            wrapped +
+            compiledContent.slice(ref.endIndex);
+        }
       } catch (err) {
         compiledRef.found = false;
         compiledRef.error = err instanceof Error ? err.message : 'Unknown error reading file';
@@ -219,14 +317,19 @@ export function compileFile(filePath: string, options: CompileOptions = {}): Com
   const {
     outputPath = getBuiltOutputPath(filePath),
     writeOutput = true,
-    _visitedFiles = new Set<string>(),
   } = options;
 
   const absoluteInputPath = path.resolve(filePath);
   const content = fs.readFileSync(absoluteInputPath, 'utf-8');
 
-  // Add the root file to visited set
-  _visitedFiles.add(absoluteInputPath);
+  // Initialize path stack with root file for circular detection
+  const pathStack = [absoluteInputPath];
+
+  // Initialize import counts map for duplicate tracking
+  const importCounts = new Map<string, number>();
+
+  // Initialize imported files set for optimization
+  const importedFiles = new Set<string>();
 
   // Use the file's directory as the base path for resolution
   const effectiveBasePath = options.basePath ?? path.dirname(absoluteInputPath);
@@ -235,11 +338,23 @@ export function compileFile(filePath: string, options: CompileOptions = {}): Com
     content,
     absoluteInputPath,
     { ...options, basePath: effectiveBasePath },
-    _visitedFiles
+    pathStack,
+    importCounts,
+    importedFiles
   );
 
   const successCount = compiledRefs.filter(r => r.found).length;
   const failedCount = compiledRefs.filter(r => !r.found).length;
+
+  // Generate import statistics
+  const duplicateFiles = Array.from(importCounts.entries())
+    .filter(([_, count]) => count > 1)
+    .map(([file, _]) => file);
+
+  const importStats: ImportStats = {
+    fileImportCounts: importCounts,
+    duplicateFiles
+  };
 
   let written = false;
   if (writeOutput) {
@@ -256,6 +371,7 @@ export function compileFile(filePath: string, options: CompileOptions = {}): Com
     successCount,
     failedCount,
     written,
+    importStats,
   };
 }
 
@@ -269,16 +385,26 @@ export function compileContent(
 ): { compiledContent: string; references: CompiledReference[] } {
   const {
     basePath = process.cwd(),
-    _visitedFiles = new Set<string>(),
   } = options;
 
   // Use the recursive compiler with a virtual file path based on basePath
   const virtualFilePath = path.join(basePath, '__virtual__.md');
 
+  // Initialize path stack (empty for virtual content)
+  const pathStack: string[] = [];
+
+  // Initialize import counts map
+  const importCounts = new Map<string, number>();
+
+  // Initialize imported files set for optimization
+  const importedFiles = new Set<string>();
+
   return compileContentRecursive(
     content,
     virtualFilePath,
     { ...options, basePath },
-    _visitedFiles
+    pathStack,
+    importCounts,
+    importedFiles
   );
 }
