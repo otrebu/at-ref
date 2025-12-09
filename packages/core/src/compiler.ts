@@ -12,8 +12,10 @@ export interface CompileOptions extends ResolveOptions {
   outputPath?: string;
   /** Whether to write the output file (default: true) */
   writeOutput?: boolean;
-  /** Custom wrapper for file content (default: markdown code block) */
+  /** Custom wrapper for file content (default: XML tags) */
   contentWrapper?: (content: string, filePath: string, ref: AtReference) => string;
+  /** Set of already visited file paths (for circular dependency detection) */
+  _visitedFiles?: Set<string>;
 }
 
 /**
@@ -30,6 +32,8 @@ export interface CompiledReference {
   content?: string;
   /** Error message (if not found) */
   error?: string;
+  /** Whether this reference was skipped due to circular dependency */
+  circular?: boolean;
 }
 
 /**
@@ -99,12 +103,10 @@ function getLanguageFromPath(filePath: string): string {
 }
 
 /**
- * Default content wrapper - wraps in markdown code block
+ * Default content wrapper - wraps in XML tags
  */
 function defaultContentWrapper(content: string, filePath: string, _ref: AtReference): string {
-  const lang = getLanguageFromPath(filePath);
-  const relativePath = filePath;
-  return `<!-- @${_ref.path} -->\n\`\`\`${lang}\n// File: ${relativePath}\n${content}\n\`\`\`\n<!-- /@${_ref.path} -->`;
+  return `<file path="${filePath}">\n${content}\n</file>`;
 }
 
 /**
@@ -118,19 +120,19 @@ export function getBuiltOutputPath(inputPath: string): string {
 }
 
 /**
- * Compile a single file, resolving all @ references
+ * Recursively compile content, resolving @references and their nested references
  */
-export function compileFile(filePath: string, options: CompileOptions = {}): CompileResult {
+function compileContentRecursive(
+  content: string,
+  currentFilePath: string,
+  options: CompileOptions,
+  visitedFiles: Set<string>
+): { compiledContent: string; references: CompiledReference[] } {
   const {
-    basePath = path.dirname(path.resolve(filePath)),
-    outputPath = getBuiltOutputPath(filePath),
-    writeOutput = true,
+    basePath = path.dirname(currentFilePath),
     contentWrapper = defaultContentWrapper,
     tryExtensions = [],
   } = options;
-
-  const absoluteInputPath = path.resolve(filePath);
-  const content = fs.readFileSync(absoluteInputPath, 'utf-8');
 
   const references = extractReferences(content);
   const compiledRefs: CompiledReference[] = [];
@@ -150,10 +152,40 @@ export function compileFile(filePath: string, options: CompileOptions = {}): Com
       found: resolved.exists && !resolved.isDirectory,
     };
 
+    // Check for circular dependency
+    if (visitedFiles.has(resolved.resolvedPath)) {
+      compiledRef.found = false;
+      compiledRef.circular = true;
+      compiledRef.error = `Circular dependency detected: ${resolved.resolvedPath}`;
+      compiledRefs.push(compiledRef);
+      continue;
+    }
+
     if (resolved.exists && !resolved.isDirectory) {
       try {
-        const fileContent = fs.readFileSync(resolved.resolvedPath, 'utf-8');
+        let fileContent = fs.readFileSync(resolved.resolvedPath, 'utf-8');
+
+        // Add this file to visited set before recursing
+        visitedFiles.add(resolved.resolvedPath);
+
+        // Recursively compile the referenced file's content
+        // Use the referenced file's directory as the new basePath
+        const nestedResult = compileContentRecursive(
+          fileContent,
+          resolved.resolvedPath,
+          {
+            ...options,
+            basePath: path.dirname(resolved.resolvedPath),
+          },
+          visitedFiles
+        );
+
+        // Use the recursively compiled content
+        fileContent = nestedResult.compiledContent;
         compiledRef.content = fileContent;
+
+        // Add nested references to our list
+        compiledRefs.push(...nestedResult.references);
 
         const wrapped = contentWrapper(fileContent, resolved.resolvedPath, ref);
         compiledContent =
@@ -176,6 +208,35 @@ export function compileFile(filePath: string, options: CompileOptions = {}): Com
 
   // Reverse to get original order
   compiledRefs.reverse();
+
+  return { compiledContent, references: compiledRefs };
+}
+
+/**
+ * Compile a single file, resolving all @ references recursively
+ */
+export function compileFile(filePath: string, options: CompileOptions = {}): CompileResult {
+  const {
+    outputPath = getBuiltOutputPath(filePath),
+    writeOutput = true,
+    _visitedFiles = new Set<string>(),
+  } = options;
+
+  const absoluteInputPath = path.resolve(filePath);
+  const content = fs.readFileSync(absoluteInputPath, 'utf-8');
+
+  // Add the root file to visited set
+  _visitedFiles.add(absoluteInputPath);
+
+  // Use the file's directory as the base path for resolution
+  const effectiveBasePath = options.basePath ?? path.dirname(absoluteInputPath);
+
+  const { compiledContent, references: compiledRefs } = compileContentRecursive(
+    content,
+    absoluteInputPath,
+    { ...options, basePath: effectiveBasePath },
+    _visitedFiles
+  );
 
   const successCount = compiledRefs.filter(r => r.found).length;
   const failedCount = compiledRefs.filter(r => !r.found).length;
@@ -200,6 +261,7 @@ export function compileFile(filePath: string, options: CompileOptions = {}): Com
 
 /**
  * Compile content string without file I/O (useful for VSCode extension)
+ * Recursively resolves all @references including nested ones
  */
 export function compileContent(
   content: string,
@@ -207,51 +269,16 @@ export function compileContent(
 ): { compiledContent: string; references: CompiledReference[] } {
   const {
     basePath = process.cwd(),
-    contentWrapper = defaultContentWrapper,
-    tryExtensions = [],
+    _visitedFiles = new Set<string>(),
   } = options;
 
-  const references = extractReferences(content);
-  const compiledRefs: CompiledReference[] = [];
+  // Use the recursive compiler with a virtual file path based on basePath
+  const virtualFilePath = path.join(basePath, '__virtual__.md');
 
-  const sortedRefs = [...references].sort((a, b) => b.startIndex - a.startIndex);
-
-  let compiledContent = content;
-
-  for (const ref of sortedRefs) {
-    const resolved = resolvePath(ref.path, { basePath, tryExtensions });
-
-    const compiledRef: CompiledReference = {
-      reference: ref,
-      resolvedPath: resolved.resolvedPath,
-      found: resolved.exists && !resolved.isDirectory,
-    };
-
-    if (resolved.exists && !resolved.isDirectory) {
-      try {
-        const fileContent = fs.readFileSync(resolved.resolvedPath, 'utf-8');
-        compiledRef.content = fileContent;
-
-        const wrapped = contentWrapper(fileContent, resolved.resolvedPath, ref);
-        compiledContent =
-          compiledContent.slice(0, ref.startIndex) +
-          wrapped +
-          compiledContent.slice(ref.endIndex);
-      } catch (err) {
-        compiledRef.found = false;
-        compiledRef.error = err instanceof Error ? err.message : 'Unknown error reading file';
-      }
-    } else if (resolved.isDirectory) {
-      compiledRef.found = false;
-      compiledRef.error = 'Path is a directory, not a file';
-    } else {
-      compiledRef.error = resolved.error || 'File not found';
-    }
-
-    compiledRefs.push(compiledRef);
-  }
-
-  compiledRefs.reverse();
-
-  return { compiledContent, references: compiledRefs };
+  return compileContentRecursive(
+    content,
+    virtualFilePath,
+    { ...options, basePath },
+    _visitedFiles
+  );
 }

@@ -32,14 +32,15 @@ describe('compileContent', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('compiles content with @references', () => {
+  it('compiles content with @references using XML tags', () => {
     const content = 'See @hello.ts for details';
     const result = compileContent(content, { basePath: tempDir });
 
     assert.strictEqual(result.references.length, 1);
     assert.strictEqual(result.references[0]?.found, true);
     assert.ok(result.compiledContent.includes('console.log("hello");'));
-    assert.ok(result.compiledContent.includes('<!-- @hello.ts -->'));
+    assert.ok(result.compiledContent.includes('<file path="'));
+    assert.ok(result.compiledContent.includes('</file>'));
   });
 
   it('handles multiple references', () => {
@@ -107,7 +108,7 @@ describe('compileFile', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('compiles file and writes output', () => {
+  it('compiles file and writes output with XML tags', () => {
     const result = compileFile(inputFile);
 
     assert.strictEqual(result.successCount, 1);
@@ -118,7 +119,8 @@ describe('compileFile', () => {
     const output = fs.readFileSync(result.outputPath, 'utf-8');
     assert.ok(output.includes('# Documentation'));
     assert.ok(output.includes('export function helper()'));
-    assert.ok(output.includes('<!-- @utils.ts -->'));
+    assert.ok(output.includes('<file path="'));
+    assert.ok(output.includes('</file>'));
   });
 
   it('uses custom output path', () => {
@@ -138,14 +140,83 @@ describe('compileFile', () => {
 
   it('supports custom content wrapper', () => {
     const customWrapper = (content: string, filePath: string) =>
-      `<file path="${filePath}">\n${content}\n</file>`;
+      `<custom path="${filePath}">\n${content}\n</custom>`;
 
     const result = compileFile(inputFile, {
       writeOutput: false,
       contentWrapper: customWrapper
     });
 
-    assert.ok(result.compiledContent.includes('<file path="'));
-    assert.ok(result.compiledContent.includes('</file>'));
+    assert.ok(result.compiledContent.includes('<custom path="'));
+    assert.ok(result.compiledContent.includes('</custom>'));
+  });
+});
+
+describe('recursive compilation', () => {
+  let tempDir: string;
+
+  before(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'at-ref-recursive-'));
+
+    // Create a chain: A -> B -> C
+    fs.writeFileSync(path.join(tempDir, 'a.md'), '# File A\n\nIncludes B: @b.md');
+    fs.writeFileSync(path.join(tempDir, 'b.md'), '# File B\n\nIncludes C: @c.md');
+    fs.writeFileSync(path.join(tempDir, 'c.md'), '# File C\n\nThis is the deepest file.');
+
+    // Create files for circular dependency test
+    fs.writeFileSync(path.join(tempDir, 'circular-a.md'), '# Circular A\n\nReferences B: @circular-b.md');
+    fs.writeFileSync(path.join(tempDir, 'circular-b.md'), '# Circular B\n\nReferences A: @circular-a.md');
+
+    // Create a file that references multiple files
+    fs.writeFileSync(path.join(tempDir, 'multi.md'), '# Multi\n\nIncludes @c.md and @b.md');
+  });
+
+  after(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('recursively compiles nested @references', () => {
+    const result = compileFile(path.join(tempDir, 'a.md'), { writeOutput: false });
+
+    // Should include content from all three files
+    assert.ok(result.compiledContent.includes('# File A'));
+    assert.ok(result.compiledContent.includes('# File B'));
+    assert.ok(result.compiledContent.includes('# File C'));
+    assert.ok(result.compiledContent.includes('This is the deepest file.'));
+
+    // Should have references from both A and B
+    const foundRefs = result.references.filter(r => r.found);
+    assert.strictEqual(foundRefs.length, 2); // b.md from A, c.md from B
+  });
+
+  it('detects circular dependencies', () => {
+    const result = compileFile(path.join(tempDir, 'circular-a.md'), { writeOutput: false });
+
+    // Should include content from both files
+    assert.ok(result.compiledContent.includes('# Circular A'));
+    assert.ok(result.compiledContent.includes('# Circular B'));
+
+    // Should detect the circular reference back to A
+    const circularRef = result.references.find(r => r.circular);
+    assert.ok(circularRef, 'Should have detected a circular reference');
+    assert.ok(circularRef.error?.includes('Circular dependency'));
+  });
+
+  it('handles multiple references at same level', () => {
+    const result = compileFile(path.join(tempDir, 'multi.md'), { writeOutput: false });
+
+    // Should include both referenced files
+    assert.ok(result.compiledContent.includes('# File C'));
+    assert.ok(result.compiledContent.includes('# File B'));
+  });
+
+  it('compileContent also supports recursive compilation', () => {
+    const content = 'Root doc includes @a.md';
+    const result = compileContent(content, { basePath: tempDir });
+
+    // Should have recursively compiled all nested references
+    assert.ok(result.compiledContent.includes('# File A'));
+    assert.ok(result.compiledContent.includes('# File B'));
+    assert.ok(result.compiledContent.includes('# File C'));
   });
 });
