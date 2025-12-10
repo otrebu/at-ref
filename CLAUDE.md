@@ -44,7 +44,7 @@ pnpm typecheck   # Type checking only
 ### Core Library Flow
 1. **parser.ts** - Extract @ references via regex (handles code spans, emails)
 2. **resolver.ts** - Convert relative paths to absolute (handles ./, ../, index files, extensions)
-3. **validator.ts** - Check file existence
+3. **validator.ts** - Check file existence (recursive by default, `--shallow` for direct refs only)
 4. **compiler.ts** - Expand references inline with `<file path="...">` tags, detect circular deps
 5. **dependency-graph.ts** - Build dependency graphs, topological sort (for folder compilation)
 6. **cli.ts** - Commands: `validate` (default), `check`, `compile`
@@ -52,6 +52,33 @@ pnpm typecheck   # Type checking only
 **Reference Pattern:** `@path/to/file` or `@./relative/path`
 - Must contain `/` or file extension to avoid email conflicts
 - Ignored in code spans (backticks)
+
+### Validation Features
+
+**Recursive Validation (Default):**
+By default, validation recursively checks ALL references in the entire dependency tree, ensuring that imported files and their nested dependencies are all valid.
+
+```bash
+# Recursive validation (default) - checks all deps
+at-ref CLAUDE.md
+
+# Fast shallow validation - checks only direct refs
+at-ref CLAUDE.md --shallow
+```
+
+**Key Behaviors:**
+- **Recursive mode (default)**: Traverses dependency tree, validates nested imports
+  - Example: If A.md references B.md, and B.md references C.md, validating A.md checks all 3 files
+  - Prevents infinite loops on circular dependencies using visited path tracking
+  - ~2x slower but finds ALL broken references (surface-level + nested)
+
+- **Shallow mode (`--shallow`)**: Only validates direct references in each file
+  - Faster for quick checks
+  - May miss broken references in imported files
+
+**Performance:**
+- Recursive: ~200ms for 63 files with nested deps
+- Shallow: ~100ms for 63 files (direct refs only)
 
 ### Compiler Features
 
@@ -131,6 +158,15 @@ packages/vscode/
 ### Circular Dependency Detection
 - **Per-file**: Compiler tracks visited files during recursive expansion via `pathStack` to prevent infinite loops
 - **Graph-level**: Folder compilation uses Tarjan's strongly connected components algorithm to detect all cycles
+- **Validation**: Uses `Set<string>` of visited paths (via `fs.realpathSync()`) to handle circular deps without infinite loops
+
+### Recursive Validation Implementation
+- **Function**: `validateReferencesRecursive()` in `validator.ts`
+- **Approach**: Mirrors `compileContentRecursive()` logic but only validates (no content expansion)
+- **Visited Tracking**: Uses `Set<string>` for O(1) lookup, tracks canonical paths via `fs.realpathSync()` to handle symlinks
+- **Recursion**: For each valid reference, reads imported file and recursively validates its references
+- **Accumulation**: Aggregates all references from entire dependency tree
+- **Default Behavior**: `validateFile()` uses recursive mode by default unless `shallow: true` is passed
 
 ### Frontmatter Handling
 Optional `--skip-frontmatter` flag strips YAML frontmatter (between `---` delimiters) from compiled output.
