@@ -84,21 +84,22 @@ at-ref CLAUDE.md --shallow
 
 #### Single File Compilation
 ```bash
-# Basic compilation
+# Basic compilation (frontmatter always stripped)
 at-ref compile input.md -o output.md
 
-# Optimization flags (64% size reduction)
-at-ref compile input.md -o output.md --skip-frontmatter --optimize-duplicates
+# Optimization flags (massive size reduction)
+at-ref compile input.md -o output.md --optimize-duplicates
 ```
 
-- `--skip-frontmatter` - Strips YAML frontmatter from output
+- Frontmatter is ALWAYS stripped from compiled output
 - `--optimize-duplicates` - Include each file once, use `<file path="..." />` for subsequent refs
+- File content wrapped with double newlines: `<file path="...">\n\n[content]\n\n</file>`
 
 #### Folder Compilation
 
 ```bash
 # Compile entire directory with bottom-up ordering
-# Frontmatter automatically skipped in folder mode
+# Frontmatter always stripped from all files
 at-ref compile docs/ --optimize-duplicates
 ```
 
@@ -107,7 +108,7 @@ at-ref compile docs/ --optimize-duplicates
 - **Bottom-up compilation** - Dependencies compiled before dependents
 - **Cross-file cache** - Shared `importCounts` and `importedFiles` maps across all compilations
 - **Structure preservation** - Mirrors source directory hierarchy in `dist/`
-- **Auto-skip frontmatter** - YAML frontmatter automatically stripped in folder mode
+- **Frontmatter stripping** - YAML frontmatter always stripped from all compiled files
 - **Massive optimization** - With `--optimize-duplicates`, shared deps included once across ALL files
 
 ### VS Code Extension Providers
@@ -169,7 +170,7 @@ packages/vscode/
 - **Default Behavior**: `validateFile()` uses recursive mode by default unless `shallow: true` is passed
 
 ### Frontmatter Handling
-Optional `--skip-frontmatter` flag strips YAML frontmatter (between `---` delimiters) from compiled output.
+YAML frontmatter (between `---` delimiters) is ALWAYS stripped from compiled output. This is non-optional and ensures clean output without metadata.
 
 ### Duplicate Optimization
 `--optimize-duplicates` includes each file's content once, subsequent references use self-closing tags `<file path="..." />`.

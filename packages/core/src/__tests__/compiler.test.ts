@@ -220,3 +220,59 @@ describe('recursive compilation', () => {
     assert.ok(result.compiledContent.includes('# File C'));
   });
 });
+
+describe('frontmatter and newlines', () => {
+  let tempDir: string;
+
+  before(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'at-ref-frontmatter-'));
+    fs.writeFileSync(path.join(tempDir, 'simple.txt'), 'Hello World');
+  });
+
+  after(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('always strips frontmatter from compiled output', () => {
+    const contentWithFrontmatter = `---
+title: Test Document
+author: Test Author
+---
+
+# Content
+
+Reference to @simple.txt`;
+
+    const result = compileContent(contentWithFrontmatter, { basePath: tempDir });
+
+    // Should not contain frontmatter
+    assert.ok(!result.compiledContent.includes('title: Test Document'));
+    assert.ok(!result.compiledContent.includes('author: Test Author'));
+    assert.ok(!result.compiledContent.includes('---'));
+    // Should contain content
+    assert.ok(result.compiledContent.includes('# Content'));
+  });
+
+  it('uses double newlines for blank lines around file tags', () => {
+    const content = 'Text @simple.txt here';
+    const result = compileContent(content, { basePath: tempDir });
+
+    // Should have blank line after opening tag (double newline)
+    assert.ok(result.compiledContent.includes('<file path="'));
+    assert.ok(result.compiledContent.includes('">\n\n'));
+    // Should have blank line before closing tag (double newline)
+    assert.ok(result.compiledContent.includes('\n\n</file>'));
+  });
+
+  it('handles files without frontmatter correctly', () => {
+    const contentWithoutFrontmatter = `# Simple Document
+
+Reference to @simple.txt`;
+
+    const result = compileContent(contentWithoutFrontmatter, { basePath: tempDir });
+
+    // Should contain all content
+    assert.ok(result.compiledContent.includes('# Simple Document'));
+    assert.ok(result.compiledContent.includes('Hello World'));
+  });
+});

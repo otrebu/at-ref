@@ -15,8 +15,6 @@ export interface CompileOptions extends ResolveOptions {
   writeOutput?: boolean;
   /** Custom wrapper for file content (default: XML tags) */
   contentWrapper?: (content: string, filePath: string, ref: AtReference) => string;
-  /** Skip @references in front matter and strip it from output */
-  skipFrontmatter?: boolean;
   /** Only import each file once, use references for duplicates */
   optimizeDuplicates?: boolean;
 }
@@ -159,7 +157,7 @@ function getLanguageFromPath(filePath: string): string {
  * Default content wrapper - wraps in XML tags
  */
 function defaultContentWrapper(content: string, filePath: string, _ref: AtReference): string {
-  return `<file path="${filePath}">\n${content}\n</file>`;
+  return `<file path="${filePath}">\n\n${content}\n\n</file>`;
 }
 
 /**
@@ -213,17 +211,13 @@ function compileContentRecursive(
     basePath = path.dirname(currentFilePath),
     contentWrapper = defaultContentWrapper,
     tryExtensions = [],
-    skipFrontmatter = false,
     optimizeDuplicates = false,
   } = options;
 
-  // Strip front matter if requested
-  let processedContent = content;
-  if (skipFrontmatter) {
-    processedContent = stripFrontMatter(content);
-  }
+  // Always strip front matter
+  const processedContent = stripFrontMatter(content);
 
-  const references = extractReferences(processedContent, { skipFrontmatter });
+  const references = extractReferences(processedContent);
   const compiledRefs: CompiledReference[] = [];
 
   // Use processedContent for compilation
