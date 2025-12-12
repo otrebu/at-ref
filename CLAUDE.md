@@ -95,13 +95,20 @@ at-ref compile input.md -o output.md --optimize-duplicates
 - Frontmatter is ALWAYS stripped from compiled output
 - `--optimize-duplicates` - Include each file once, use `<file path="..." />` for subsequent refs
 - File content wrapped with double newlines: `<file path="...">\n\n[content]\n\n</file>`
-- **Heading adjustment (ALWAYS ON)** - Automatically shifts heading levels based on context
+- **Heading normalization (default)** - Preserves relative heading hierarchy within imported files
+- `--additive-headings` - Use legacy additive heading shift mode
 
 #### Heading Level Adjustment
 
-**BREAKING CHANGE:** Heading adjustment is **always enabled** by default. When a file is imported, its headings are automatically shifted based on the parent document's heading structure.
+Heading adjustment is **always enabled** by default. There are two modes:
 
-**How it works:**
+**Normalize Mode (Default):**
+Preserves the relative heading hierarchy within imported files. The first heading of imported content is normalized to `context level + 1`, and all other headings maintain their relative positions.
+
+**Additive Mode (`--additive-headings`):**
+Legacy behavior that adds the context level to all heading levels cumulatively.
+
+**Example showing the difference:**
 ```markdown
 parent.md:
 # Parent Title
@@ -109,36 +116,54 @@ parent.md:
 @child.md
 
 child.md:
-# Child Title
-## Child Section
+## Commander
+### Usage
+#### Example
 ```
 
-**Compiled output:**
+**Normalize mode output (default):**
 ```markdown
 # Parent Title
 ## Section
-### Child Title        ← shifted from # to ### (context depth = 2)
-#### Child Section     ← shifted from ## to #### (context depth = 2)
+### Commander       ← h2 normalized to h3 (context=h2, target=h3, shift=+1)
+#### Usage          ← relative hierarchy preserved (+1)
+##### Example       ← relative hierarchy preserved (+1)
+```
+
+**Additive mode output (`--additive-headings`):**
+```markdown
+# Parent Title
+## Section
+#### Commander      ← h2 + shift(2) = h4
+##### Usage         ← h3 + shift(2) = h5
+###### Example      ← h4 + shift(2) = h6
 ```
 
 **Key behaviors:**
-- **Context detection**: Heading level determined by last heading before @reference
-- **Recursive accumulation**: Nested imports accumulate shifts through the chain
-- **H6 clamping**: Headings never exceed h6 (maximum markdown level)
+- **Normalize mode**: First heading → `context + 1`, preserves relative differences
+- **Additive mode**: All headings → `heading + context level` (cumulative through nesting)
+- **Context detection**: Level determined by last heading before @reference
+- **H1-H6 clamping**: Headings clamped to valid markdown range (h1-h6)
 - **Warning on clamp**: Console warning emitted when headings are clamped
 - **Code block preservation**: Headings inside ``` code blocks are NOT shifted
-- **No preceding heading**: If @reference appears before any heading, no shift applied (context level = 0)
+- **No preceding heading**: Target = h1 in normalize mode, no shift in additive mode
 
-**Example with nesting:**
+**Nested import example (normalize mode):**
 ```markdown
 A.md:  # Root → ## Section → @B.md
-B.md:  # B Title → ## B Section → @C.md
-C.md:  # C Title
+B.md:  ### B Title → #### B Sub → @C.md
+C.md:  ## C Title → ### C Sub
+
+Step 1: C imported into B (context=h4, target=h5)
+  C: h2→h5, h3→h6 (shift=+3)
+
+Step 2: B+C imported into A (context=h2, target=h3)
+  B starts at h3, target=h3, shift=0
+  All headings in B (including C) unchanged
 
 Result:
-A → B shifted +2 (h1 becomes h3, h2 becomes h4)
-B → C shifted +4 (accumulated: B's original h2 context + A's +2 shift)
-C's h1 becomes h5
+  B: h3, h4 (unchanged)
+  C: h5, h6 (from step 1)
 ```
 
 #### Folder Compilation

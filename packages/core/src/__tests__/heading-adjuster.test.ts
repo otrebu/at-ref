@@ -6,6 +6,7 @@ import {
   analyzeHeadingContext,
   findCodeBlockRanges,
   isInsideCodeBlock,
+  normalizeHeadings,
 } from '../heading-adjuster';
 import type { AtReference } from '../types';
 
@@ -425,5 +426,164 @@ Some text
     const context = contextMap.get(references[0]!.startIndex);
     assert.ok(context);
     assert.strictEqual(context.contextLevel, 3); // Most recent is h3
+  });
+});
+
+describe('adjustHeadings with negative shift', () => {
+  it('shifts headings up (decreasing level)', () => {
+    const content = `### H3
+#### H4
+##### H5`;
+
+    const adjusted = adjustHeadings(content, -2, false);
+
+    assert.ok(adjusted.includes('# H3'));  // 3-2=1
+    assert.ok(adjusted.includes('## H4')); // 4-2=2
+    assert.ok(adjusted.includes('### H5')); // 5-2=3
+  });
+
+  it('clamps at h1 when shifting up too much', () => {
+    const content = `## H2
+### H3`;
+
+    const adjusted = adjustHeadings(content, -5, false);
+
+    assert.ok(adjusted.includes('# H2'));  // 2-5=-3 → clamped to 1
+    assert.ok(adjusted.includes('# H3'));  // 3-5=-2 → clamped to 1
+    assert.ok(!adjusted.includes('##'));   // No h2 or higher
+  });
+
+  it('warns when clamping at h1', () => {
+    const content = '## H2';
+
+    const originalWarn = console.warn;
+    let warnCalled = false;
+    console.warn = () => { warnCalled = true; };
+
+    adjustHeadings(content, -5, true);
+
+    console.warn = originalWarn;
+    assert.strictEqual(warnCalled, true);
+  });
+});
+
+describe('normalizeHeadings', () => {
+  it('normalizes first heading to target level', () => {
+    const content = `### Title
+#### Section
+##### Subsection`;
+
+    const normalized = normalizeHeadings(content, 1, false);
+
+    assert.ok(normalized.includes('# Title'));    // 3→1 (shift -2)
+    assert.ok(normalized.includes('## Section')); // 4→2
+    assert.ok(normalized.includes('### Subsection')); // 5→3
+  });
+
+  it('preserves relative heading hierarchy', () => {
+    const content = `## Commander
+#### Usage
+### Chalk`;
+
+    const normalized = normalizeHeadings(content, 2, false);
+
+    // First heading is h2, target is h2, shift = 0
+    assert.ok(normalized.includes('## Commander'));
+    assert.ok(normalized.includes('#### Usage'));
+    assert.ok(normalized.includes('### Chalk'));
+  });
+
+  it('returns unchanged when no headings', () => {
+    const content = 'Plain text\nNo headings here';
+
+    const normalized = normalizeHeadings(content, 3, false);
+
+    assert.strictEqual(normalized, content);
+  });
+
+  it('normalizes h4 file to start at h2 (negative shift)', () => {
+    const content = `#### Deep Level
+##### Even Deeper`;
+
+    const normalized = normalizeHeadings(content, 2, false);
+
+    assert.ok(normalized.includes('## Deep Level'));   // 4→2 (shift -2)
+    assert.ok(normalized.includes('### Even Deeper')); // 5→3
+  });
+
+  it('normalizes h1 file to start at h3 (positive shift)', () => {
+    const content = `# Title
+## Section`;
+
+    const normalized = normalizeHeadings(content, 3, false);
+
+    assert.ok(normalized.includes('### Title'));   // 1→3 (shift +2)
+    assert.ok(normalized.includes('#### Section')); // 2→4
+  });
+
+  it('clamps at h6 when normalizing deep', () => {
+    const content = `# Title
+## Section`;
+
+    const normalized = normalizeHeadings(content, 6, false);
+
+    assert.ok(normalized.includes('###### Title'));   // 1→6 (shift +5)
+    assert.ok(normalized.includes('###### Section')); // 2→7 → clamped to 6
+    assert.ok(!normalized.includes('#######')); // No h7
+  });
+
+  it('clamps at h1 when normalizing shallow', () => {
+    const content = `### Title
+#### Section`;
+
+    const normalized = normalizeHeadings(content, 1, false);
+
+    assert.ok(normalized.includes('# Title'));   // 3→1 (shift -2)
+    assert.ok(normalized.includes('## Section')); // 4→2
+  });
+
+  it('ignores headings in code blocks', () => {
+    const content = `## Real Heading
+\`\`\`markdown
+# Fake Heading
+\`\`\`
+### Another Real`;
+
+    const normalized = normalizeHeadings(content, 1, false);
+
+    // First REAL heading is h2, target is h1, shift = -1
+    assert.ok(normalized.includes('# Real Heading'));
+    assert.ok(normalized.includes('# Fake Heading')); // Unchanged (in code block)
+    assert.ok(normalized.includes('## Another Real'));
+  });
+
+  it('adjusts headings inside file blocks when skipFileBlocks is false', () => {
+    const content = `## Title
+<file path="test.md">
+
+### Nested Heading
+
+</file>`;
+
+    const normalized = normalizeHeadings(content, 3, false, false);
+
+    // First heading is h2, target is h3, shift = +1
+    assert.ok(normalized.includes('### Title'));
+    assert.ok(normalized.includes('#### Nested Heading')); // Also shifted
+  });
+
+  it('skips headings inside file blocks when skipFileBlocks is true', () => {
+    const content = `## Title
+<file path="test.md">
+
+### Nested Heading
+
+</file>`;
+
+    const normalized = normalizeHeadings(content, 3, false, true);
+
+    // First heading is h2, target is h3, shift = +1
+    assert.ok(normalized.includes('### Title'));
+    assert.ok(normalized.includes('### Nested Heading')); // NOT shifted (in file block)
   });
 });

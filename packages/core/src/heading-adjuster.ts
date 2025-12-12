@@ -1,10 +1,16 @@
 import type { AtReference, Heading, HeadingContext } from './types';
 
 /**
- * Find all excluded ranges in the content (code blocks and file tags)
+ * Find all excluded ranges in the content (code blocks and optionally file tags)
  * to exclude them from heading detection and adjustment
+ *
+ * @param content The markdown content to analyze
+ * @param includeFileBlocks Whether to include <file> blocks in excluded ranges (default: true)
  */
-export function findExcludedRanges(content: string): Array<{ start: number; end: number }> {
+export function findExcludedRanges(
+  content: string,
+  includeFileBlocks: boolean = true
+): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
 
   // Match fenced code blocks first (``` ... ```) as they take precedence
@@ -39,13 +45,15 @@ export function findExcludedRanges(content: string): Array<{ start: number; end:
   }
 
   // Match <file ...>...</file> blocks and self-closing <file .../> tags
-  const fileBlockPattern = /<file\s[^>]*>[\s\S]*?<\/file>|<file\s[^>]*\/>/g;
+  if (includeFileBlocks) {
+    const fileBlockPattern = /<file\s[^>]*>[\s\S]*?<\/file>|<file\s[^>]*\/>/g;
 
-  while ((match = fileBlockPattern.exec(content)) !== null) {
-    ranges.push({
-      start: match.index,
-      end: match.index + match[0].length,
-    });
+    while ((match = fileBlockPattern.exec(content)) !== null) {
+      ranges.push({
+        start: match.index,
+        end: match.index + match[0].length,
+      });
+    }
   }
 
   return ranges;
@@ -87,9 +95,9 @@ export function extractHeadings(content: string): Heading[] {
     }
 
     headings.push({
-      level: match[1].length,
+      level: match[1]!.length,
       position: match.index,
-      text: match[2].trim(),
+      text: match[2]!.trim(),
     });
   }
 
@@ -101,7 +109,7 @@ export function extractHeadings(content: string): Heading[] {
  * clamping at h6 (maximum markdown heading level)
  *
  * @param content The markdown content to adjust
- * @param shiftAmount Number of levels to shift (positive to increase depth)
+ * @param shiftAmount Number of levels to shift (positive to increase depth, negative to decrease)
  * @param warnOnClamp Whether to emit warnings when headings are clamped to h6
  * @param skipFileBlocks Whether to skip adjusting headings inside <file> tags (for recursive compilation)
  * @returns The content with adjusted heading levels
@@ -114,7 +122,9 @@ export function adjustHeadings(
 ): string {
   if (shiftAmount === 0) return content;
 
-  const excludedRanges = skipFileBlocks ? findExcludedRanges(content) : findCodeBlockRanges(content);
+  // When skipFileBlocks is true, exclude both code blocks AND file blocks
+  // When false, only exclude code blocks (allow adjusting headings in file blocks)
+  const excludedRanges = findExcludedRanges(content, skipFileBlocks);
   const headingPattern = /^(#{1,6})(\s+.+)$/gm;
 
   let adjusted = content;
@@ -133,11 +143,11 @@ export function adjustHeadings(
 
   // Process matches
   for (const match of matches) {
-    const currentLevel = match[1].length;
+    const currentLevel = match[1]!.length;
     const targetLevel = currentLevel + shiftAmount;
-    const newLevel = Math.min(targetLevel, 6); // Clamp to h6
+    const newLevel = Math.max(1, Math.min(targetLevel, 6)); // Clamp to h1-h6
 
-    if (targetLevel > 6) {
+    if (targetLevel > 6 || targetLevel < 1) {
       clampedCount++;
     }
 
@@ -154,7 +164,7 @@ export function adjustHeadings(
   }
 
   if (warnOnClamp && clampedCount > 0) {
-    console.warn(`Warning: ${clampedCount} heading(s) clamped to h6 due to deep nesting`);
+    console.warn(`Warning: ${clampedCount} heading(s) clamped to h1-h6 range`);
   }
 
   return adjusted;
@@ -196,4 +206,38 @@ export function analyzeHeadingContext(
   }
 
   return contextMap;
+}
+
+/**
+ * Normalize heading levels in content to start at a target level,
+ * preserving the relative hierarchy between headings.
+ *
+ * Unlike `adjustHeadings` which shifts all headings by a fixed amount,
+ * this function calculates the shift based on the first heading in the content.
+ *
+ * @param content The markdown content to normalize
+ * @param targetLevel The target level for the first heading (1-6)
+ * @param warnOnClamp Whether to emit warnings when headings are clamped
+ * @param skipFileBlocks Whether to skip adjusting headings inside <file> tags
+ * @returns The content with normalized heading levels
+ */
+export function normalizeHeadings(
+  content: string,
+  targetLevel: number,
+  warnOnClamp: boolean = false,
+  skipFileBlocks: boolean = false
+): string {
+  // Extract headings to find the first one (source base)
+  // Note: extractHeadings excludes code blocks and file blocks by default,
+  // but for normalization we want to find the first VISIBLE heading
+  const headings = extractHeadings(content);
+
+  // If no headings, return content unchanged
+  if (headings.length === 0) return content;
+
+  const sourceBase = headings[0]!.level;
+  const shiftAmount = targetLevel - sourceBase;
+
+  // Use adjustHeadings with the calculated shift
+  return adjustHeadings(content, shiftAmount, warnOnClamp, skipFileBlocks);
 }

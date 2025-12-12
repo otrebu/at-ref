@@ -430,3 +430,111 @@ describe('heading level adjustment', () => {
     assert.ok(result.compiledContent.includes('### Section')); // h2 -> h3
   });
 });
+
+describe('heading normalization mode', () => {
+  let tempDir: string;
+
+  before(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'at-ref-normalize-'));
+
+    // Create test files where child starts with h2 (not h1)
+    // This is where normalize differs from additive
+    fs.writeFileSync(path.join(tempDir, 'parent.md'),
+      '# Parent\n## Section\n@child-h2.md');
+
+    fs.writeFileSync(path.join(tempDir, 'child-h2.md'),
+      '## Commander\n### Usage\n#### Example');
+
+    // Nested test with non-h1 starting files
+    fs.writeFileSync(path.join(tempDir, 'root.md'),
+      '# Root\n## Section\n@middle.md');
+
+    fs.writeFileSync(path.join(tempDir, 'middle.md'),
+      '### Middle Title\n#### Middle Sub\n@leaf.md');
+
+    fs.writeFileSync(path.join(tempDir, 'leaf.md'),
+      '## Leaf Title\n### Leaf Sub');
+  });
+
+  after(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('preserves relative hierarchy with normalize mode (default)', () => {
+    const result = compileFile(path.join(tempDir, 'parent.md'), {
+      writeOutput: false,
+      // headingMode defaults to 'normalize'
+    });
+
+    // Context is h2, target = h3
+    // Child starts with h2, shift = h3 - h2 = +1
+    // h2 → h3, h3 → h4, h4 → h5
+    assert.ok(result.compiledContent.includes('### Commander'));
+    assert.ok(result.compiledContent.includes('#### Usage'));
+    assert.ok(result.compiledContent.includes('##### Example'));
+
+    // Parent headings unchanged
+    assert.ok(result.compiledContent.includes('# Parent'));
+    assert.ok(result.compiledContent.includes('## Section'));
+  });
+
+  it('preserves relative hierarchy in nested imports with normalize mode', () => {
+    const result = compileFile(path.join(tempDir, 'root.md'), {
+      writeOutput: false,
+    });
+
+    // Leaf imported into middle (context h4):
+    //   target = h5, leaf starts h2, shift = +3
+    //   h2 → h5, h3 → h6
+
+    // Middle imported into root (context h2):
+    //   target = h3, middle starts h3, shift = 0
+    //   All headings in middle (including leaf) shift +0
+    //   So middle stays h3, h4, and leaf stays h5, h6
+
+    assert.ok(result.compiledContent.includes('### Middle Title'));
+    assert.ok(result.compiledContent.includes('#### Middle Sub'));
+    assert.ok(result.compiledContent.includes('##### Leaf Title'));
+    assert.ok(result.compiledContent.includes('###### Leaf Sub'));
+  });
+
+  it('uses additive shift with headingMode: additive', () => {
+    const result = compileFile(path.join(tempDir, 'parent.md'), {
+      writeOutput: false,
+      headingMode: 'additive',
+    });
+
+    // Context is h2, additive shift = +2
+    // h2 → h4, h3 → h5, h4 → h6
+    assert.ok(result.compiledContent.includes('#### Commander'));
+    assert.ok(result.compiledContent.includes('##### Usage'));
+    assert.ok(result.compiledContent.includes('###### Example'));
+  });
+
+  it('normalizes to h1 when no preceding heading', () => {
+    fs.writeFileSync(path.join(tempDir, 'no-heading-parent.md'),
+      '@child-h2.md\n\n# After');
+
+    const result = compileFile(path.join(tempDir, 'no-heading-parent.md'), {
+      writeOutput: false,
+    });
+
+    // Context = 0, target = 1
+    // Child starts h2, shift = -1
+    // h2 → h1, h3 → h2, h4 → h3
+    assert.ok(result.compiledContent.includes('# Commander'));
+    assert.ok(result.compiledContent.includes('## Usage'));
+    assert.ok(result.compiledContent.includes('### Example'));
+  });
+
+  it('does not normalize root file headings', () => {
+    const result = compileFile(path.join(tempDir, 'child-h2.md'), {
+      writeOutput: false,
+    });
+
+    // Root file (no parent import) should keep original headings
+    assert.ok(result.compiledContent.includes('## Commander'));
+    assert.ok(result.compiledContent.includes('### Usage'));
+    assert.ok(result.compiledContent.includes('#### Example'));
+  });
+});
