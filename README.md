@@ -37,8 +37,10 @@ Configuration is in @config/settings.json.
 - **Folder compilation** - Compile entire directories with:
   - Dependency-aware ordering (bottom-up, dependencies compiled first)
   - Cross-file caching for massive size reduction with `--optimize-duplicates`
-  - Automatic frontmatter stripping in folder mode
-- **64% size reduction** - With `--skip-frontmatter --optimize-duplicates`
+  - Automatic frontmatter stripping (always enabled)
+- **Heading level adjustment** - Automatic heading hierarchy management:
+  - Normalize mode (default) - preserves relative heading structure
+  - Additive mode (`--additive-headings`) - legacy cumulative shift
 
 #### Flexible Output Formats
 - **Default** - Per-file details with broken references grouped by target
@@ -183,8 +185,8 @@ at-ref compile CLAUDE.md
 # Custom output path
 at-ref compile CLAUDE.md --output CLAUDE.compiled.md
 
-# Optimization flags
-at-ref compile CLAUDE.md --skip-frontmatter --optimize-duplicates
+# Optimization flags (frontmatter always stripped)
+at-ref compile CLAUDE.md --optimize-duplicates
 ```
 
 **Folder Compilation:**
@@ -207,8 +209,8 @@ at-ref compile docs/ --verbose
 
 | Flag | Alias | Description | Impact |
 |------|-------|-------------|--------|
-| `--skip-frontmatter` | - | Skip refs in YAML frontmatter & strip it | Cleaner output, no frontmatter |
-| `--optimize-duplicates` | - | Import each file once, use stubs for duplicates | 64%+ smaller files |
+| `--optimize-duplicates` | - | Import each file once, use stubs for duplicates | Significant size reduction |
+| `--additive-headings` | - | Use additive heading shift mode | Legacy nesting behavior |
 | `--output <path>` | `-o` | Custom output file | Single file mode only |
 | `--output-dir <path>` | - | Custom output directory | Folder mode (default: `dist/`) |
 | `--dist <path>` | - | Alias for `--output-dir` | Folder mode |
@@ -221,7 +223,8 @@ at-ref compile docs/ --verbose
 3. **Topologically sorts** files (Kahn's algorithm - dependencies compiled first, bottom-up)
 4. **Shares cache** across all files - with `--optimize-duplicates`, shared dependencies included once
 5. **Mirrors structure** - `docs/blocks/base.md` → `dist/blocks/base.md`
-6. **Auto-strips frontmatter** in folder mode
+6. **Strips frontmatter** - YAML frontmatter always removed from output
+7. **Adjusts headings** - Imported content headings normalized to context
 
 **Output Format:**
 - Full imports: `<file path="src/index.ts">content here</file>`
@@ -285,7 +288,7 @@ Result: Complete report showing which files are missing and which files referenc
 ### Example: Self-Contained Documentation Release
 Prepare documentation for distribution:
 ```bash
-at-ref compile README.md --skip-frontmatter --optimize-duplicates
+at-ref compile README.md --optimize-duplicates
 ```
 Result: Single file with all references expanded inline.
 
@@ -317,9 +320,14 @@ Result: Single file with all references expanded inline.
 4. **compiler.ts** - Expand references inline
    - Recursive expansion with circular dependency detection
    - Per-file `pathStack` to prevent infinite loops
-   - Optional frontmatter skipping and duplicate optimization
+   - Automatic frontmatter stripping and duplicate optimization
 
-5. **dependency-graph.ts** - Build and sort dependency graphs
+5. **heading-adjuster.ts** - Adjust heading levels
+   - Normalize mode (default) - preserves relative hierarchy
+   - Additive mode - cumulative shift through nesting
+   - Code block preservation (headings in code not shifted)
+
+6. **dependency-graph.ts** - Build and sort dependency graphs
    - **Tarjan's algorithm** - Detect strongly connected components (cycles)
    - **Kahn's algorithm** - Topological sort (bottom-up ordering)
    - Used for folder compilation
@@ -373,18 +381,20 @@ at-reference/ (monorepo)
 │   │   │   ├── resolver.ts        Path resolution
 │   │   │   ├── validator.ts       File existence checks
 │   │   │   ├── compiler.ts        Reference expansion
+│   │   │   ├── heading-adjuster.ts Heading level adjustment
 │   │   │   ├── dependency-graph.ts Graph algorithms
 │   │   │   ├── formatter.ts       CLI output (ANSI colors)
 │   │   │   ├── tree-formatter.ts  Hierarchical trees
 │   │   │   ├── cli.ts             Command dispatcher
 │   │   │   ├── types.ts           TypeScript interfaces
-│   │   │   └── __tests__/         8 test files
+│   │   │   └── __tests__/         9 test files
 │   │   │       ├── parser.test.ts
 │   │   │       ├── resolver.test.ts
 │   │   │       ├── validator.test.ts
 │   │   │       ├── compiler.test.ts
 │   │   │       ├── dependency-graph.test.ts
 │   │   │       ├── folder-compile.test.ts
+│   │   │       ├── heading-adjuster.test.ts
 │   │   │       ├── formatter.test.ts
 │   │   │       └── formatter-broken-by-target.test.ts
 │   │   └── package.json
@@ -500,12 +510,12 @@ const fastResult = validateFile('./CLAUDE.md', {
   basePath: process.cwd()
 });
 
-// Compile file
+// Compile file (frontmatter always stripped)
 const compiled = compileFile('input.md', {
   outputPath: 'output.md',
   basePath: process.cwd(),
-  skipFrontmatter: true,
-  optimizeDuplicates: true
+  optimizeDuplicates: true,
+  headingMode: 'normalize'  // or 'additive' for legacy behavior
 });
 // compiled = { inputPath, outputPath, references: [...], successCount, failedCount, ... }
 
@@ -514,8 +524,8 @@ import { compileFolder } from '@at-reference/core';
 const folderResult = compileFolder('docs/', {
   outputDir: 'dist/',
   basePath: process.cwd(),
-  skipFrontmatter: true,
-  optimizeDuplicates: true
+  optimizeDuplicates: true,
+  headingMode: 'normalize'  // default
 });
 // folderResult = { totalFiles, totalReferences, totalFailures, circularFiles, duration, ... }
 ```
