@@ -45,9 +45,10 @@ pnpm typecheck   # Type checking only
 1. **parser.ts** - Extract @ references via regex (handles code spans, emails)
 2. **resolver.ts** - Convert relative paths to absolute (handles ./, ../, index files, extensions)
 3. **validator.ts** - Check file existence (recursive by default, `--shallow` for direct refs only)
-4. **compiler.ts** - Expand references inline with `<file path="...">` tags, detect circular deps
-5. **dependency-graph.ts** - Build dependency graphs, topological sort (for folder compilation)
-6. **cli.ts** - Commands: `validate` (default), `check`, `compile`
+4. **compiler.ts** - Expand references inline with `<file path="...">` tags, detect circular deps, adjust heading levels
+5. **heading-adjuster.ts** - Shift heading levels based on import context (always enabled)
+6. **dependency-graph.ts** - Build dependency graphs, topological sort (for folder compilation)
+7. **cli.ts** - Commands: `validate` (default), `check`, `compile`
 
 **Reference Pattern:** `@path/to/file` or `@./relative/path`
 - Must contain `/` or file extension to avoid email conflicts
@@ -94,6 +95,51 @@ at-ref compile input.md -o output.md --optimize-duplicates
 - Frontmatter is ALWAYS stripped from compiled output
 - `--optimize-duplicates` - Include each file once, use `<file path="..." />` for subsequent refs
 - File content wrapped with double newlines: `<file path="...">\n\n[content]\n\n</file>`
+- **Heading adjustment (ALWAYS ON)** - Automatically shifts heading levels based on context
+
+#### Heading Level Adjustment
+
+**BREAKING CHANGE:** Heading adjustment is **always enabled** by default. When a file is imported, its headings are automatically shifted based on the parent document's heading structure.
+
+**How it works:**
+```markdown
+parent.md:
+# Parent Title
+## Section
+@child.md
+
+child.md:
+# Child Title
+## Child Section
+```
+
+**Compiled output:**
+```markdown
+# Parent Title
+## Section
+### Child Title        ← shifted from # to ### (context depth = 2)
+#### Child Section     ← shifted from ## to #### (context depth = 2)
+```
+
+**Key behaviors:**
+- **Context detection**: Heading level determined by last heading before @reference
+- **Recursive accumulation**: Nested imports accumulate shifts through the chain
+- **H6 clamping**: Headings never exceed h6 (maximum markdown level)
+- **Warning on clamp**: Console warning emitted when headings are clamped
+- **Code block preservation**: Headings inside ``` code blocks are NOT shifted
+- **No preceding heading**: If @reference appears before any heading, no shift applied (context level = 0)
+
+**Example with nesting:**
+```markdown
+A.md:  # Root → ## Section → @B.md
+B.md:  # B Title → ## B Section → @C.md
+C.md:  # C Title
+
+Result:
+A → B shifted +2 (h1 becomes h3, h2 becomes h4)
+B → C shifted +4 (accumulated: B's original h2 context + A's +2 shift)
+C's h1 becomes h5
+```
 
 #### Folder Compilation
 
@@ -125,13 +171,14 @@ packages/core/
     parser.ts          # Regex extraction
     resolver.ts        # Path resolution
     validator.ts       # File validation
-    compiler.ts        # Reference expansion (recursive, circular detection, folder compilation)
+    compiler.ts        # Reference expansion (recursive, circular detection, folder compilation, heading adjustment)
+    heading-adjuster.ts # Heading level shifting based on context
     dependency-graph.ts # Graph building, topological sort, cycle detection
     formatter.ts       # CLI output (ANSI colors)
     tree-formatter.ts  # Hierarchical import graph
     cli.ts            # Command dispatcher (single file + folder modes)
     types.ts          # TypeScript interfaces
-    __tests__/        # Unit tests (parser, resolver, validator, compiler, dependency-graph, folder-compile)
+    __tests__/        # Unit tests (parser, resolver, validator, compiler, dependency-graph, folder-compile, heading-adjuster)
 
 packages/vscode/
   src/
