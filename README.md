@@ -1,4 +1,8 @@
-# at-reference
+# at-ref
+
+<p align="center">
+  <img src="assets/banner.png" alt="at-ref - tooling for @path/to/file references" width="100%">
+</p>
 
 **Tooling for Claude Code's `@path/to/file` reference syntax**
 
