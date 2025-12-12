@@ -4,6 +4,7 @@ import { extractReferences, stripFrontMatter } from './parser';
 import { resolvePath } from './resolver';
 import type { AtReference, ResolveOptions } from './types';
 import { buildDependencyGraph, topologicalSort, type DependencyGraph } from './dependency-graph';
+import { adjustHeadings, analyzeHeadingContext } from './heading-adjuster';
 
 /**
  * Options for compiling @ references
@@ -205,7 +206,8 @@ function compileContentRecursive(
   options: CompileOptions,
   pathStack: string[],
   importCounts: Map<string, number>,
-  importedFiles: Set<string>
+  importedFiles: Set<string>,
+  cumulativeHeadingShift: number = 0
 ): { compiledContent: string; references: CompiledReference[] } {
   const {
     basePath = path.dirname(currentFilePath),
@@ -219,6 +221,9 @@ function compileContentRecursive(
 
   const references = extractReferences(processedContent);
   const compiledRefs: CompiledReference[] = [];
+
+  // Analyze heading context for each reference
+  const contextMap = analyzeHeadingContext(processedContent, references);
 
   // Use processedContent for compilation
   let compiledContent = processedContent;
@@ -292,6 +297,10 @@ function compileContentRecursive(
 
           let fileContent = fs.readFileSync(resolved.resolvedPath, 'utf-8');
 
+          // Calculate heading shift for this import
+          const localContext = contextMap.get(ref.startIndex);
+          const shiftForThisImport = cumulativeHeadingShift + (localContext?.contextLevel ?? 0);
+
           // Add to path stack for circular detection
           const newPathStack = [...pathStack, resolved.resolvedPath];
 
@@ -303,11 +312,13 @@ function compileContentRecursive(
             options,
             newPathStack,
             importCounts,
-            importedFiles
+            importedFiles,
+            shiftForThisImport  // Pass cumulative shift down
           );
 
           // Use the recursively compiled content
           fileContent = nestedResult.compiledContent;
+
           compiledRef.content = fileContent;
 
           // Add nested references to our list
@@ -335,6 +346,12 @@ function compileContentRecursive(
 
   // Reverse to get original order
   compiledRefs.reverse();
+
+  // Apply heading adjustment after all references are expanded
+  // This shifts only top-level headings (not those inside <file> blocks)
+  if (cumulativeHeadingShift > 0) {
+    compiledContent = adjustHeadings(compiledContent, cumulativeHeadingShift, true, true);
+  }
 
   return { compiledContent, references: compiledRefs };
 }
@@ -372,7 +389,8 @@ function compileFileWithCache(
     { ...options, basePath: effectiveBasePath },
     pathStack,
     importCounts,
-    importedFiles
+    importedFiles,
+    0  // Initial cumulative heading shift
   );
 
   const successCount = compiledRefs.filter(r => r.found).length;
@@ -452,7 +470,8 @@ export function compileContent(
     { ...options, basePath },
     pathStack,
     importCounts,
-    importedFiles
+    importedFiles,
+    0  // Initial cumulative heading shift
   );
 }
 
