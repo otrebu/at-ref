@@ -81,6 +81,11 @@
           "default": true,
           "description": "Show file preview on hover"
         },
+        "atReference.enableFolding": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable code folding for <file> tags in markdown"
+        },
         "atReference.exclude": {
           "type": "array",
           "default": [

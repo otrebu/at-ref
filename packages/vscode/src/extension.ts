@@ -5,6 +5,7 @@ import { AtReferenceDiagnosticsProvider } from './providers/diagnosticsProvider'
 import { AtReferenceHoverProvider } from './providers/hoverProvider';
 import { AtReferenceCompletionProvider } from './providers/completionProvider';
 import { AtReferenceDecorationProvider } from './providers/decorationProvider';
+import { AtReferenceFoldingRangeProvider } from './providers/foldingRangeProvider';
 import { getConfig } from './config';
 import { compileFile, compileFolder, getBuiltOutputPath } from '@at-reference/core';
 
@@ -47,6 +48,17 @@ export function activate(context: vscode.ExtensionContext) {
         { language: 'markdown' },
         completionProvider,
         '@', '/'
+      )
+    );
+  }
+
+  // Folding
+  if (config.enableFolding) {
+    const foldingProvider = new AtReferenceFoldingRangeProvider();
+    context.subscriptions.push(
+      vscode.languages.registerFoldingRangeProvider(
+        { language: 'markdown' },
+        foldingProvider
       )
     );
   }
