@@ -39,7 +39,9 @@ describe('compileContent', () => {
     assert.strictEqual(result.references.length, 1);
     assert.strictEqual(result.references[0]?.found, true);
     assert.ok(result.compiledContent.includes('console.log("hello");'));
-    assert.ok(result.compiledContent.includes('<file path="'));
+    assert.ok(result.compiledContent.includes('<file name="'));
+    assert.ok(result.compiledContent.includes('name="hello.ts"'));
+    assert.ok(result.compiledContent.includes('path="'));
     assert.ok(result.compiledContent.includes('</file>'));
   });
 
@@ -119,7 +121,9 @@ describe('compileFile', () => {
     const output = fs.readFileSync(result.outputPath, 'utf-8');
     assert.ok(output.includes('# Documentation'));
     assert.ok(output.includes('export function helper()'));
-    assert.ok(output.includes('<file path="'));
+    assert.ok(output.includes('<file name="'));
+    assert.ok(output.includes('name="utils.ts"'));
+    assert.ok(output.includes('path="'));
     assert.ok(output.includes('</file>'));
   });
 
@@ -258,7 +262,7 @@ Reference to @simple.txt`;
     const result = compileContent(content, { basePath: tempDir });
 
     // Should have blank line after opening tag (double newline)
-    assert.ok(result.compiledContent.includes('<file path="'));
+    assert.ok(result.compiledContent.includes('<file name="'));
     assert.ok(result.compiledContent.includes('">\n\n'));
     // Should have blank line before closing tag (double newline)
     assert.ok(result.compiledContent.includes('\n\n</file>'));

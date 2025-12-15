@@ -4,7 +4,7 @@ import { calculateFoldingRanges } from '../utils/foldingLogic';
 
 describe('calculateFoldingRanges', () => {
   it('should create folding range for balanced tags', () => {
-    const text = '<file path="test.md">\nContent\n</file>';
+    const text = '<file name="test.md" path="~/test.md">\nContent\n</file>';
     const ranges = calculateFoldingRanges(text);
 
     assert.strictEqual(ranges.length, 1);
@@ -13,7 +13,7 @@ describe('calculateFoldingRanges', () => {
   });
 
   it('should handle nested tags', () => {
-    const text = '<file path="outer.md">\n<file path="inner.md">\nContent\n</file>\n</file>';
+    const text = '<file name="outer.md" path="~/outer.md">\n<file name="inner.md" path="~/inner.md">\nContent\n</file>\n</file>';
     const ranges = calculateFoldingRanges(text);
 
     assert.strictEqual(ranges.length, 2);
@@ -26,21 +26,21 @@ describe('calculateFoldingRanges', () => {
   });
 
   it('should ignore self-closing tags', () => {
-    const text = '<file path="test.md" />\nSome content';
+    const text = '<file name="test.md" path="~/test.md" />\nSome content';
     const ranges = calculateFoldingRanges(text);
 
     assert.strictEqual(ranges.length, 0);
   });
 
   it('should not fold same-line tags', () => {
-    const text = '<file path="test.md">Content</file>';
+    const text = '<file name="test.md" path="~/test.md">Content</file>';
     const ranges = calculateFoldingRanges(text);
 
     assert.strictEqual(ranges.length, 0);
   });
 
   it('should handle unbalanced tags (extra closing)', () => {
-    const text = '</file>\n<file path="test.md">\nContent\n</file>';
+    const text = '</file>\n<file name="test.md" path="~/test.md">\nContent\n</file>';
     const ranges = calculateFoldingRanges(text);
 
     // Should only create range for balanced pair
@@ -50,7 +50,7 @@ describe('calculateFoldingRanges', () => {
   });
 
   it('should handle unclosed tags', () => {
-    const text = '<file path="test.md">\nContent\nMore content';
+    const text = '<file name="test.md" path="~/test.md">\nContent\nMore content';
     const ranges = calculateFoldingRanges(text);
 
     // No closing tag, so no folding range
@@ -58,14 +58,14 @@ describe('calculateFoldingRanges', () => {
   });
 
   it('should ignore tags inside code blocks', () => {
-    const text = '```markdown\n<file path="test.md">\nContent\n</file>\n```';
+    const text = '```markdown\n<file name="test.md" path="~/test.md">\nContent\n</file>\n```';
     const ranges = calculateFoldingRanges(text);
 
     assert.strictEqual(ranges.length, 0);
   });
 
   it('should handle multiple tags on same line', () => {
-    const text = '<file path="a.md"><file path="b.md">\nContent\n</file></file>';
+    const text = '<file name="a.md" path="~/a.md"><file name="b.md" path="~/b.md">\nContent\n</file></file>';
     const ranges = calculateFoldingRanges(text);
 
     assert.strictEqual(ranges.length, 2);
@@ -78,7 +78,7 @@ describe('calculateFoldingRanges', () => {
   });
 
   it('should handle code blocks with nested tags outside', () => {
-    const text = '<file path="outer.md">\n```\n<file path="ignore.md">\n```\n<file path="inner.md">\nContent\n</file>\n</file>';
+    const text = '<file name="outer.md" path="~/outer.md">\n```\n<file name="ignore.md" path="~/ignore.md">\n```\n<file name="inner.md" path="~/inner.md">\nContent\n</file>\n</file>';
     const ranges = calculateFoldingRanges(text);
 
     // Should have outer (0-7) and inner (4-6)

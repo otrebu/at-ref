@@ -8,6 +8,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **@at-reference/core** - Library for parsing, validating, and compiling @ references in markdown
 - **at-reference-support** - VS Code extension for navigation, validation, hover, and autocomplete
 
+## Breaking Changes
+
+### v0.2.0 - File Tag Format Update
+Compiled output now uses dual-attribute XML tags with XML escaping:
+
+**Before:** `<file path="/full/path/to/file.md">content</file>`
+**After:** `<file name="file.md" path="~/project/to/file.md">content</file>`
+
+**Key changes:**
+- Added `name` attribute (basename)
+- Path values shortened with `~` for home directory
+- All attribute values XML-escaped (handles `&<>"` in paths/filenames)
+- VS Code extension updated for folding/decorations
+
 ## Development Commands
 
 ### Root (Monorepo)
@@ -45,7 +59,7 @@ pnpm typecheck   # Type checking only
 1. **parser.ts** - Extract @ references via regex (handles code spans, emails)
 2. **resolver.ts** - Convert relative paths to absolute (handles ./, ../, index files, extensions)
 3. **validator.ts** - Check file existence (recursive by default, `--shallow` for direct refs only)
-4. **compiler.ts** - Expand references inline with `<file path="...">` tags, detect circular deps, adjust heading levels
+4. **compiler.ts** - Expand references inline with `<file name="..." path="...">` tags, detect circular deps, adjust heading levels
 5. **heading-adjuster.ts** - Shift heading levels based on import context (always enabled)
 6. **dependency-graph.ts** - Build dependency graphs, topological sort (for folder compilation)
 7. **cli.ts** - Commands: `validate` (default), `check`, `compile`
@@ -93,8 +107,8 @@ at-ref compile input.md -o output.md --optimize-duplicates
 ```
 
 - Frontmatter is ALWAYS stripped from compiled output
-- `--optimize-duplicates` - Include each file once, use `<file path="..." />` for subsequent refs
-- File content wrapped with double newlines: `<file path="...">\n\n[content]\n\n</file>`
+- `--optimize-duplicates` - Include each file once, use `<file name="..." path="..." />` for subsequent refs
+- File content wrapped with double newlines: `<file name="..." path="...">\n\n[content]\n\n</file>`
 - **Heading normalization (default)** - Preserves relative heading hierarchy within imported files
 - `--additive-headings` - Use legacy additive heading shift mode
 
@@ -269,7 +283,7 @@ YAML frontmatter (between `---` delimiters) is ALWAYS stripped from compiled out
 **Bottom-Up Compilation**:
 - Files compiled in topological order (dependencies before dependents)
 - When compiling file A that references B, B is already in the global cache
-- With `--optimize-duplicates`, A uses stub `<file path="..." />` for B
+- With `--optimize-duplicates`, A uses stub `<file name="..." path="..." />` for B
 
 ### Path Resolution Strategy
 1. Try exact path

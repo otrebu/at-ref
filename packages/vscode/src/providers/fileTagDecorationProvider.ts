@@ -124,7 +124,7 @@ export class FileTagDecorationProvider implements vscode.Disposable {
       const line = lines[lineNum];
 
       // Skip self-closing tags
-      const selfClosingPattern = /<file\s+path="[^"]*"\s*\/>/;
+      const selfClosingPattern = /<file\s+name="[^"]*"\s+path="[^"]*"\s*\/>/;
       if (selfClosingPattern.test(line)) {
         continue;
       }
@@ -134,7 +134,7 @@ export class FileTagDecorationProvider implements vscode.Disposable {
       lineDepths.set(lineNum, [...stack]);
 
       // Process opening tags on this line
-      const openPattern = /<file\s+path="[^"]*">/g;
+      const openPattern = /<file\s+name="[^"]*"\s+path="[^"]*">/g;
       let match;
       while ((match = openPattern.exec(line)) !== null) {
         const depth = stack.length % 6; // Cycle through 0-5
@@ -176,7 +176,7 @@ export class FileTagDecorationProvider implements vscode.Disposable {
       }
 
       // Parse path attributes for highlighting (separate from depth lines)
-      const openPattern = /<file\s+path="([^"]*)">/g;
+      const openPattern = /<file\s+name="[^"]*"\s+path="([^"]*)"/g;
       let match;
       while ((match = openPattern.exec(line)) !== null) {
         // Determine depth for this opening tag

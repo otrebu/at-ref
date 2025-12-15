@@ -22,13 +22,13 @@ export function calculateFoldingRanges(text: string): Array<{ start: number; end
     if (inCodeBlock) continue;
 
     // Check if this line contains a self-closing tag - skip it
-    const selfClosingPattern = /<file\s+path="[^"]*"\s*\/>/;
+    const selfClosingPattern = /<file\s+name="[^"]*"\s+path="[^"]*"\s*\/>/;
     if (selfClosingPattern.test(line)) {
       continue;
     }
 
     // Find all opening tags in this line
-    const openTagPattern = /<file\s+path="[^"]*">/g;
+    const openTagPattern = /<file\s+name="[^"]*"\s+path="[^"]*">/g;
     let openMatch;
     while ((openMatch = openTagPattern.exec(line)) !== null) {
       stack.push(lineNum);
