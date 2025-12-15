@@ -130,15 +130,19 @@ describe('folder compilation', () => {
       assert.ok(aHasFullContent || bHasFullContent, 'At least one should have full content');
 
       // Check for stub format in the one that doesn't have full content
-      const aHasStub = compiledA.compiledContent.includes('<file path="') &&
+      const aHasStub = compiledA.compiledContent.includes('<file name="') &&
+        compiledA.compiledContent.includes('path="') &&
         compiledA.compiledContent.includes('/>');
-      const bHasStub = compiledB.compiledContent.includes('<file path="') &&
+      const bHasStub = compiledB.compiledContent.includes('<file name="') &&
+        compiledB.compiledContent.includes('path="') &&
         compiledB.compiledContent.includes('/>');
 
       if (aHasFullContent) {
-        assert.ok(bHasStub, 'B should have stub reference');
+        assert.ok(bHasStub, 'B should have stub reference with name and path');
+        assert.ok(compiledB.compiledContent.includes('name="common.md"'));
       } else {
-        assert.ok(aHasStub, 'A should have stub reference');
+        assert.ok(aHasStub, 'A should have stub reference with name and path');
+        assert.ok(compiledA.compiledContent.includes('name="common.md"'));
       }
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });

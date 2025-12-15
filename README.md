@@ -79,6 +79,28 @@ Configuration is in @config/settings.json.
 | `exclude` | array | `["**/node_modules/**", "**/.git/**"]` | Patterns to exclude from autocomplete |
 | `previewLines` | number | `10` | Number of lines to show in hover preview |
 
+## Breaking Changes
+
+### v0.2.0 - File Tag Format Update
+The compiled output format has changed from single-attribute to dual-attribute XML tags:
+
+**Before:**
+```xml
+<file path="/full/path/to/file.md">content</file>
+<file path="/full/path/to/file.md" />
+```
+
+**After:**
+```xml
+<file name="file.md" path="~/project/to/file.md">content</file>
+<file name="file.md" path="~/project/to/file.md" />
+```
+
+**Impact:**
+- Any tooling parsing `<file>` tags must be updated to handle both `name` and `path` attributes
+- VS Code extension folding/decoration providers have been updated
+- Path values now use `~` for home directory and include XML escaping
+
 ## Installation
 
 ### CLI Installation
@@ -231,8 +253,8 @@ at-ref compile docs/ --verbose
 7. **Adjusts headings** - Imported content headings normalized to context
 
 **Output Format:**
-- Full imports: `<file path="src/index.ts">content here</file>`
-- Optimized stubs (with `--optimize-duplicates`): `<file path="src/index.ts" />`
+- Full imports: `<file name="index.ts" path="~/project/src/index.ts">content here</file>`
+- Optimized stubs (with `--optimize-duplicates`): `<file name="index.ts" path="~/project/src/index.ts" />`
 
 ### VS Code Extension Usage
 

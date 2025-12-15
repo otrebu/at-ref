@@ -5,6 +5,8 @@ import { AtReferenceDiagnosticsProvider } from './providers/diagnosticsProvider'
 import { AtReferenceHoverProvider } from './providers/hoverProvider';
 import { AtReferenceCompletionProvider } from './providers/completionProvider';
 import { AtReferenceDecorationProvider } from './providers/decorationProvider';
+import { AtReferenceFoldingRangeProvider } from './providers/foldingRangeProvider';
+import { FileTagDecorationProvider } from './providers/fileTagDecorationProvider';
 import { getConfig } from './config';
 import { compileFile, compileFolder, getBuiltOutputPath } from '@at-reference/core';
 
@@ -51,9 +53,26 @@ export function activate(context: vscode.ExtensionContext) {
     );
   }
 
+  // Folding
+  if (config.enableFolding) {
+    const foldingProvider = new AtReferenceFoldingRangeProvider();
+    context.subscriptions.push(
+      vscode.languages.registerFoldingRangeProvider(
+        { language: 'markdown' },
+        foldingProvider
+      )
+    );
+  }
+
   // Decorations - always enabled for visual feedback
   const decorationProvider = new AtReferenceDecorationProvider();
   context.subscriptions.push(decorationProvider);
+
+  // File tag decorations
+  if (config.enableFileTagDecorations) {
+    const fileTagDecorationProvider = new FileTagDecorationProvider();
+    context.subscriptions.push(fileTagDecorationProvider);
+  }
 
   // Compile file command
   context.subscriptions.push(

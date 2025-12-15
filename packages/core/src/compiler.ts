@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import { extractReferences, stripFrontMatter } from './parser';
 import { resolvePath } from './resolver';
 import type { AtReference, ResolveOptions } from './types';
@@ -162,17 +163,43 @@ function getLanguageFromPath(filePath: string): string {
 }
 
 /**
+ * Escape XML special characters for attribute values
+ */
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Format file path for tag attributes
+ * Returns { name: filename, path: shortened path with ~ }
+ */
+function formatPathForTag(filePath: string): { name: string; path: string } {
+  const name = path.basename(filePath);
+  const homeDir = os.homedir();
+  const shortenedPath = filePath.startsWith(homeDir)
+    ? filePath.replace(homeDir, '~')
+    : filePath;
+  return { name: escapeXml(name), path: escapeXml(shortenedPath) };
+}
+
+/**
  * Default content wrapper - wraps in XML tags
  */
 function defaultContentWrapper(content: string, filePath: string, _ref: AtReference): string {
-  return `<file path="${filePath}">\n\n${content}\n\n</file>`;
+  const { name, path: shortPath } = formatPathForTag(filePath);
+  return `<file name="${name}" path="${shortPath}">\n\n${content}\n\n</file>`;
 }
 
 /**
  * Reference wrapper - lightweight self-closing reference to already-imported file
  */
 function referenceWrapper(filePath: string): string {
-  return `<file path="${filePath}" />`;
+  const { name, path: shortPath } = formatPathForTag(filePath);
+  return `<file name="${name}" path="${shortPath}" />`;
 }
 
 /**

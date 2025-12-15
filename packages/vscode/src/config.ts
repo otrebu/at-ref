@@ -4,6 +4,8 @@ export interface ExtensionConfig {
   enableDiagnostics: boolean;
   enableCompletion: boolean;
   enableHover: boolean;
+  enableFolding: boolean;
+  enableFileTagDecorations: boolean;
   exclude: string[];
   previewLines: number;
   compileOptimizeDuplicates: boolean;
@@ -16,6 +18,8 @@ export function getConfig(): ExtensionConfig {
     enableDiagnostics: config.get<boolean>('enableDiagnostics', true),
     enableCompletion: config.get<boolean>('enableCompletion', true),
     enableHover: config.get<boolean>('enableHover', true),
+    enableFolding: config.get<boolean>('enableFolding', true),
+    enableFileTagDecorations: config.get<boolean>('enableFileTagDecorations', true),
     exclude: config.get<string[]>('exclude', ['**/node_modules/**', '**/.git/**']),
     previewLines: config.get<number>('previewLines', 10),
     compileOptimizeDuplicates: config.get<boolean>('compile.optimizeDuplicates', true),

@@ -81,6 +81,16 @@
           "default": true,
           "description": "Show file preview on hover"
         },
+        "atReference.enableFolding": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable code folding for <file> tags in markdown"
+        },
+        "atReference.enableFileTagDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Highlight <file> tags with colored borders showing nesting depth"
+        },
         "atReference.exclude": {
           "type": "array",
           "default": [
@@ -111,10 +121,11 @@
     "vscode:prepublish": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.25",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^2.22.0",
     "esbuild": "^0.19.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.0"
   },
   "dependencies": {
