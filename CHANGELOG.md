@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.1](https://github.com/otrebu/at-ref/compare/v1.0.0...v1.0.1) (2025-12-23)
+
+
+### Bug Fixes
+
+* add README to npm package ([51a99be](https://github.com/otrebu/at-ref/commit/51a99be0acbf2b14f5a9813e5fe138a9012741ab))
+
 # 1.0.0 (2025-12-23)
 
 
