@@ -10,6 +10,7 @@
  */
 export default {
   branches: ["main"],
+  repositoryUrl: "https://github.com/otrebu/at-ref.git",
   plugins: [
     // 1. Analyze commits to determine version bump
     ["@semantic-release/commit-analyzer", {
