@@ -8,10 +8,10 @@ import { AtReferenceDecorationProvider } from './providers/decorationProvider';
 import { AtReferenceFoldingRangeProvider } from './providers/foldingRangeProvider';
 import { FileTagDecorationProvider } from './providers/fileTagDecorationProvider';
 import { getConfig } from './config';
-import { compileFile, compileFolder, getBuiltOutputPath } from '@at-reference/core';
+import { compileFile, compileFolder, getBuiltOutputPath } from '@ub/at-ref';
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('At Reference Support activated');
+  console.log('At Ref Support activated');
 
   const config = getConfig();
 

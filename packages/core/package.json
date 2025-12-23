@@ -1,6 +1,6 @@
 {
-  "name": "@at-reference/core",
-  "version": "0.1.0",
+  "name": "@ub/at-ref",
+  "version": "0.2.0",
   "description": "Parse and validate @path/to/file references",
   "type": "module",
   "main": "./dist/index.js",
@@ -27,7 +27,7 @@
   "keywords": [
     "claude",
     "claude-code",
-    "at-reference",
+    "at-ref",
     "markdown",
     "validator",
     "parser"

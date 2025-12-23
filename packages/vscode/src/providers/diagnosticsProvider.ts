@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { extractReferences, resolvePath } from '@at-reference/core';
+import { extractReferences, resolvePath } from '@ub/at-ref';
 import { getConfig } from '../config';
 
 export class AtReferenceDiagnosticsProvider implements vscode.Disposable {
@@ -13,7 +13,7 @@ export class AtReferenceDiagnosticsProvider implements vscode.Disposable {
   private referencedFiles = new Set<string>();
 
   constructor() {
-    this.diagnosticCollection = vscode.languages.createDiagnosticCollection('at-references');
+    this.diagnosticCollection = vscode.languages.createDiagnosticCollection('at-ref');
     this.excludePatterns = getConfig().exclude;
 
     // Validate open documents
@@ -189,7 +189,7 @@ export class AtReferenceDiagnosticsProvider implements vscode.Disposable {
           `File not found: ${resolved.resolvedPath}`,
           vscode.DiagnosticSeverity.Error
         );
-        diagnostic.source = 'at-reference';
+        diagnostic.source = 'at-ref';
         diagnostics.push(diagnostic);
       }
     }

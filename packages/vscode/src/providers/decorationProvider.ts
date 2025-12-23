@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { extractReferences } from '@at-reference/core';
+import { extractReferences } from '@ub/at-ref';
 
 export class AtReferenceDecorationProvider implements vscode.Disposable {
   private decorationType: vscode.TextEditorDecorationType;

@@ -1,9 +1,9 @@
 {
-  "name": "at-reference-support",
-  "displayName": "At Reference Support",
+  "name": "at-ref",
+  "displayName": "At Ref",
   "description": "Navigate and validate @path/to/file references in markdown files",
-  "version": "0.1.0",
-  "publisher": "at-reference",
+  "version": "0.2.0",
+  "publisher": "at-ref",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -64,7 +64,7 @@
       ]
     },
     "configuration": {
-      "title": "At Reference Support",
+      "title": "At Ref",
       "properties": {
         "atReference.enableDiagnostics": {
           "type": "boolean",
@@ -129,6 +129,6 @@
     "typescript": "^5.3.0"
   },
   "dependencies": {
-    "@at-reference/core": "workspace:*"
+    "@ub/at-ref": "workspace:*"
   }
 }

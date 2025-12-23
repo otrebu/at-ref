@@ -52,7 +52,7 @@ Configuration is in @config/settings.json.
 - **Verbose** - Show all references (valid + broken) per file
 - **Quiet** - Only show files with errors (perfect for CI)
 
-### VS Code Extension (`at-reference-support`)
+### VS Code Extension (`at-ref`)
 
 #### Navigation & Feedback
 - **Ctrl/Cmd+Click** - Navigate to referenced files instantly
@@ -388,7 +388,7 @@ extension.ts → Orchestrates 5 providers
 └── decorationProvider.ts → Visual feedback (blue underlines)
 ```
 
-Each provider uses the core library (`@at-reference/core`) for parsing, resolution, and validation.
+Each provider uses the core library (`@ub/at-ref`) for parsing, resolution, and validation.
 
 ## Development
 
@@ -401,7 +401,7 @@ Each provider uses the core library (`@at-reference/core`) for parsing, resoluti
 ```
 at-reference/ (monorepo)
 ├── packages/
-│   ├── core/              @at-reference/core (CLI + library)
+│   ├── core/              @ub/at-ref (CLI + library)
 │   │   ├── src/
 │   │   │   ├── parser.ts          Extract @references
 │   │   │   ├── resolver.ts        Path resolution
@@ -424,7 +424,7 @@ at-reference/ (monorepo)
 │   │   │       ├── formatter.test.ts
 │   │   │       └── formatter-broken-by-target.test.ts
 │   │   └── package.json
-│   └── vscode/            at-reference-support (extension)
+│   └── vscode/            at-ref (VS Code extension)
 │       ├── src/
 │       │   ├── extension.ts       Activation & commands
 │       │   ├── config.ts          Settings management
@@ -510,14 +510,14 @@ node --import tsx --test src/__tests__/validator.test.ts
 
 ## API Reference
 
-Use `@at-reference/core` programmatically in your own projects:
+Use `@ub/at-ref` programmatically in your own projects:
 
 ```typescript
 import {
   extractReferences,
   validateFile,
   compileFile
-} from '@at-reference/core';
+} from '@ub/at-ref';
 
 // Parse references from text
 const refs = extractReferences('See @src/index.ts for details');
@@ -546,7 +546,7 @@ const compiled = compileFile('input.md', {
 // compiled = { inputPath, outputPath, references: [...], successCount, failedCount, ... }
 
 // Compile folder
-import { compileFolder } from '@at-reference/core';
+import { compileFolder } from '@ub/at-ref';
 const folderResult = compileFolder('docs/', {
   outputDir: 'dist/',
   basePath: process.cwd(),
