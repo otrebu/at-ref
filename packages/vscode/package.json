@@ -2,7 +2,7 @@
   "name": "at-ref",
   "displayName": "At Ref",
   "description": "Navigate and validate @path/to/file references in markdown files",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "publisher": "at-ref",
   "engines": {
     "vscode": "^1.85.0"

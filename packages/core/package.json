@@ -1,6 +1,6 @@
 {
   "name": "@u-b/at-ref",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Parse and validate @path/to/file references",
   "type": "module",
   "main": "./dist/index.js",
