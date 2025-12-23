@@ -1,0 +1,5 @@
+title: at-ref
+description: Tooling for Claude Code's @path/to/file reference syntax
+remote_theme: pages-themes/cayman@v0.2.0
+plugins:
+  - jekyll-remote-theme
