@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 **at-ref** is a monorepo providing tools for Claude Code's `@path/to/file` reference syntax:
-- **@ub/at-ref** - Library for parsing, validating, and compiling @ references in markdown
+- **@u-b/at-ref** - Library for parsing, validating, and compiling @ references in markdown
 - **at-ref** (VS Code) - Extension for navigation, validation, hover, and autocomplete
 
 ## Breaking Changes

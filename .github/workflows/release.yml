@@ -34,13 +34,6 @@ jobs:
       - run: pnpm build
       - run: pnpm test
 
-      - name: Debug token
-        run: |
-          echo "NPM_TOKEN length: ${#NPM_TOKEN}"
-          echo "NPM_TOKEN prefix: ${NPM_TOKEN:0:8}"
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

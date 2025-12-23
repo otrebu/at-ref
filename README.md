@@ -388,7 +388,7 @@ extension.ts → Orchestrates 5 providers
 └── decorationProvider.ts → Visual feedback (blue underlines)
 ```
 
-Each provider uses the core library (`@ub/at-ref`) for parsing, resolution, and validation.
+Each provider uses the core library (`@u-b/at-ref`) for parsing, resolution, and validation.
 
 ## Development
 
@@ -401,7 +401,7 @@ Each provider uses the core library (`@ub/at-ref`) for parsing, resolution, and 
 ```
 at-reference/ (monorepo)
 ├── packages/
-│   ├── core/              @ub/at-ref (CLI + library)
+│   ├── core/              @u-b/at-ref (CLI + library)
 │   │   ├── src/
 │   │   │   ├── parser.ts          Extract @references
 │   │   │   ├── resolver.ts        Path resolution
@@ -510,14 +510,14 @@ node --import tsx --test src/__tests__/validator.test.ts
 
 ## API Reference
 
-Use `@ub/at-ref` programmatically in your own projects:
+Use `@u-b/at-ref` programmatically in your own projects:
 
 ```typescript
 import {
   extractReferences,
   validateFile,
   compileFile
-} from '@ub/at-ref';
+} from '@u-b/at-ref';
 
 // Parse references from text
 const refs = extractReferences('See @src/index.ts for details');
@@ -546,7 +546,7 @@ const compiled = compileFile('input.md', {
 // compiled = { inputPath, outputPath, references: [...], successCount, failedCount, ... }
 
 // Compile folder
-import { compileFolder } from '@ub/at-ref';
+import { compileFolder } from '@u-b/at-ref';
 const folderResult = compileFolder('docs/', {
   outputDir: 'dist/',
   basePath: process.cwd(),

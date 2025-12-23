@@ -1,4 +1,4 @@
-// @ub/at-ref
+// @u-b/at-ref
 // Parse and validate @path/to/file references
 
 export * from './types';

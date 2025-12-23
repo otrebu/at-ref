@@ -129,6 +129,6 @@
     "typescript": "^5.3.0"
   },
   "dependencies": {
-    "@ub/at-ref": "workspace:*"
+    "@u-b/at-ref": "workspace:*"
   }
 }

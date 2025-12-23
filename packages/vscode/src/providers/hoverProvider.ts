@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { extractReferences, resolvePath, AtReference } from '@ub/at-ref';
+import { extractReferences, resolvePath, AtReference } from '@u-b/at-ref';
 import { getConfig } from '../config';
 
 export class AtReferenceHoverProvider implements vscode.HoverProvider {

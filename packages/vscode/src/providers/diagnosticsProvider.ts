@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { extractReferences, resolvePath } from '@ub/at-ref';
+import { extractReferences, resolvePath } from '@u-b/at-ref';
 import { getConfig } from '../config';
 
 export class AtReferenceDiagnosticsProvider implements vscode.Disposable {

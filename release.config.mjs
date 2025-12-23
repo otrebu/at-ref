@@ -4,7 +4,7 @@
  * Unified versioning for at-ref monorepo:
  * - Analyzes commits using conventional commit format
  * - Updates version in root and both package.json files
- * - Publishes @ub/at-ref to npm
+ * - Publishes @u-b/at-ref to npm
  * - Creates GitHub release with changelog
  * - Commits version changes back to repo
  */
@@ -41,7 +41,7 @@ export default {
       prepareCmd: "node scripts/sync-versions.mjs ${nextRelease.version}",
     }],
 
-    // 5. Publish @ub/at-ref to npm
+    // 5. Publish @u-b/at-ref to npm
     ["@semantic-release/npm", {
       pkgRoot: "packages/core",
     }],

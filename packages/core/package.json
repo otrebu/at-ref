@@ -1,5 +1,5 @@
 {
-  "name": "@ub/at-ref",
+  "name": "@u-b/at-ref",
   "version": "0.2.0",
   "description": "Parse and validate @path/to/file references",
   "type": "module",

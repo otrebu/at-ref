@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { extractReferences } from '@ub/at-ref';
+import { extractReferences } from '@u-b/at-ref';
 
 export class AtReferenceLinkProvider implements vscode.DocumentLinkProvider {
   provideDocumentLinks(document: vscode.TextDocument): vscode.DocumentLink[] {
