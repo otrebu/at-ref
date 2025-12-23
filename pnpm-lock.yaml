@@ -50,7 +50,7 @@ importers:
 
   packages/vscode:
     dependencies:
-      '@ub/at-ref':
+      '@u-b/at-ref':
         specifier: workspace:*
         version: link:../core
     devDependencies:
