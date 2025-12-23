@@ -24,7 +24,7 @@ export class FileTagDecorationProvider implements vscode.Disposable {
         vscode.window.createTextEditorDecorationType({
           before: {
             contentText: '▏',  // Thin vertical bar character
-            color: new vscode.ThemeColor(this.COLORS[i]),
+            color: new vscode.ThemeColor(this.COLORS[i]!),
             margin: `0 0 0 ${i * 6}px`,  // Offset based on depth
             width: '2px'
           }
@@ -34,7 +34,7 @@ export class FileTagDecorationProvider implements vscode.Disposable {
       // Path attribute: bold + color
       this.pathDecorations.push(
         vscode.window.createTextEditorDecorationType({
-          color: new vscode.ThemeColor(this.COLORS[i]),
+          color: new vscode.ThemeColor(this.COLORS[i]!),
           fontWeight: 'bold'
         })
       );
@@ -121,7 +121,7 @@ export class FileTagDecorationProvider implements vscode.Disposable {
     const lines = document.getText().split('\n');
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-      const line = lines[lineNum];
+      const line = lines[lineNum]!;
 
       // Skip self-closing tags
       const selfClosingPattern = /<file\s+name="[^"]*"\s+path="[^"]*"\s*\/>/;
@@ -165,12 +165,12 @@ export class FileTagDecorationProvider implements vscode.Disposable {
     const pathRanges: vscode.DecorationOptions[][] = [[], [], [], [], [], []];
 
     for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-      const line = lines[lineNum];
+      const line = lines[lineNum]!;
       const activeDepths = lineDepths.get(lineNum) || [];
 
       // Apply decorations for ALL active depths on this line
       for (const depth of activeDepths) {
-        depthRanges[depth].push({
+        depthRanges[depth]!.push({
           range: new vscode.Range(lineNum, 0, lineNum, 0)
         });
       }
@@ -182,18 +182,19 @@ export class FileTagDecorationProvider implements vscode.Disposable {
         // Determine depth for this opening tag
         const currentStackDepth = activeDepths.length; // Depth before this tag was added
         const tagDepth = currentStackDepth % 6;
+        const pathValue = match[1]!;
 
-        const pathStart = match.index + match[0].indexOf(match[1]);
-        pathRanges[tagDepth].push({
-          range: new vscode.Range(lineNum, pathStart, lineNum, pathStart + match[1].length)
+        const pathStart = match.index + match[0].indexOf(pathValue);
+        pathRanges[tagDepth]!.push({
+          range: new vscode.Range(lineNum, pathStart, lineNum, pathStart + pathValue.length)
         });
       }
     }
 
     // Apply all decorations
     for (let i = 0; i < 6; i++) {
-      editor.setDecorations(this.depthLineDecorations[i], depthRanges[i]);
-      editor.setDecorations(this.pathDecorations[i], pathRanges[i]);
+      editor.setDecorations(this.depthLineDecorations[i]!, depthRanges[i]!);
+      editor.setDecorations(this.pathDecorations[i]!, pathRanges[i]!);
     }
   }
 

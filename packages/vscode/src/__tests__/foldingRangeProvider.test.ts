@@ -8,8 +8,8 @@ describe('calculateFoldingRanges', () => {
     const ranges = calculateFoldingRanges(text);
 
     assert.strictEqual(ranges.length, 1);
-    assert.strictEqual(ranges[0].start, 0);
-    assert.strictEqual(ranges[0].end, 2);
+    assert.strictEqual(ranges[0]!.start, 0);
+    assert.strictEqual(ranges[0]!.end, 2);
   });
 
   it('should handle nested tags', () => {
@@ -18,11 +18,11 @@ describe('calculateFoldingRanges', () => {
 
     assert.strictEqual(ranges.length, 2);
     // Inner fold (1-3)
-    assert.strictEqual(ranges[0].start, 1);
-    assert.strictEqual(ranges[0].end, 3);
+    assert.strictEqual(ranges[0]!.start, 1);
+    assert.strictEqual(ranges[0]!.end, 3);
     // Outer fold (0-4)
-    assert.strictEqual(ranges[1].start, 0);
-    assert.strictEqual(ranges[1].end, 4);
+    assert.strictEqual(ranges[1]!.start, 0);
+    assert.strictEqual(ranges[1]!.end, 4);
   });
 
   it('should ignore self-closing tags', () => {
@@ -45,8 +45,8 @@ describe('calculateFoldingRanges', () => {
 
     // Should only create range for balanced pair
     assert.strictEqual(ranges.length, 1);
-    assert.strictEqual(ranges[0].start, 1);
-    assert.strictEqual(ranges[0].end, 3);
+    assert.strictEqual(ranges[0]!.start, 1);
+    assert.strictEqual(ranges[0]!.end, 3);
   });
 
   it('should handle unclosed tags', () => {
@@ -70,11 +70,11 @@ describe('calculateFoldingRanges', () => {
 
     assert.strictEqual(ranges.length, 2);
     // Inner fold
-    assert.strictEqual(ranges[0].start, 0);
-    assert.strictEqual(ranges[0].end, 2);
+    assert.strictEqual(ranges[0]!.start, 0);
+    assert.strictEqual(ranges[0]!.end, 2);
     // Outer fold
-    assert.strictEqual(ranges[1].start, 0);
-    assert.strictEqual(ranges[1].end, 2);
+    assert.strictEqual(ranges[1]!.start, 0);
+    assert.strictEqual(ranges[1]!.end, 2);
   });
 
   it('should handle code blocks with nested tags outside', () => {
