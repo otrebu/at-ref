@@ -5,3 +5,6 @@ tsconfig.json
 *.map
 .gitignore
 pnpm-lock.yaml
+**/*.ts
+!images/**
+!LICENSE

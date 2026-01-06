@@ -1,22 +1,39 @@
 {
   "name": "at-ref",
   "displayName": "At Ref",
-  "description": "Navigate and validate @path/to/file references in markdown files",
+  "description": "Navigate and validate @path/to/file references in markdown files - Claude Code companion",
   "version": "1.0.1",
-  "publisher": "at-ref",
+  "publisher": "ub",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uberto/at-ref.git"
+  },
+  "homepage": "https://github.com/uberto/at-ref#readme",
+  "bugs": {
+    "url": "https://github.com/uberto/at-ref/issues"
+  },
+  "galleryBanner": {
+    "color": "#0d1117",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
     "Other",
-    "Linters"
+    "Linters",
+    "Programming Languages"
   ],
   "keywords": [
     "claude",
     "claude-code",
     "markdown",
     "reference",
-    "navigation"
+    "navigation",
+    "documentation",
+    "at-reference"
   ],
   "activationEvents": [
     "onLanguage:markdown"

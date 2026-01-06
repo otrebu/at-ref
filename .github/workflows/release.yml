@@ -14,6 +14,9 @@ jobs:
   release:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,8 +38,65 @@ jobs:
       - run: pnpm test
 
       - name: Release
+        id: semantic
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: pnpm semantic-release
+
+  publish-extension:
+    runs-on: ubuntu-latest
+    needs: release
+    if: needs.release.outputs.new_release_published == 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.release.outputs.new_release_version }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Validate tokens exist
+        run: |
+          if [ -z "${{ secrets.VSCE_TOKEN }}" ]; then
+            echo "::error::VSCE_TOKEN secret not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.OVSX_TOKEN }}" ]; then
+            echo "::error::OVSX_TOKEN secret not set"
+            exit 1
+          fi
+
+      - name: Pre-publish validation
+        run: |
+          cd packages/vscode
+          npx @vscode/vsce ls --no-dependencies
+
+      - name: Publish to VS Code Marketplace
+        id: vsce
+        run: npx @vscode/vsce publish -p ${{ secrets.VSCE_TOKEN }} --no-dependencies
+        working-directory: packages/vscode
+        continue-on-error: true
+
+      - name: Publish to Open VSX
+        id: ovsx
+        run: npx ovsx publish -p ${{ secrets.OVSX_TOKEN }}
+        working-directory: packages/vscode
+        continue-on-error: true
+
+      - name: Verify at least one succeeded
+        run: |
+          if [ "${{ steps.vsce.outcome }}" == "failure" ] && [ "${{ steps.ovsx.outcome }}" == "failure" ]; then
+            echo "::error::Both marketplace publishes failed!"
+            exit 1
+          fi
