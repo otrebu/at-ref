@@ -40,3 +40,21 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: pnpm semantic-release
+
+      - name: Publish to VS Code Marketplace
+        if: ${{ secrets.VSCE_PAT != '' }}
+        working-directory: packages/vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          npx @vscode/vsce publish --pat "$VSCE_PAT" --no-dependencies
+        continue-on-error: true
+
+      - name: Publish to OpenVSX (Cursor)
+        if: ${{ secrets.OVSX_PAT != '' }}
+        working-directory: packages/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          npx ovsx publish --pat "$OVSX_PAT" --no-dependencies
+        continue-on-error: true
